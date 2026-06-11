@@ -1,0 +1,9 @@
+[package]
+name = "lore_intent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

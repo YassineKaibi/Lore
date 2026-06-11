@@ -1,0 +1,7 @@
+[project]
+name = "lint_project"
+languages = ["python"]
+
+[modules]
+"src/pay/**" = "Payment"
+"src/user/**" = "User"

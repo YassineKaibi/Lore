@@ -1,0 +1,6 @@
+[project]
+name = "ask_project"
+languages = ["python"]
+
+[modules]
+"src/pay/**" = "Payment"

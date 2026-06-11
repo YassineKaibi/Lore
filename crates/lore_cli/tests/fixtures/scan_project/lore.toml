@@ -1,0 +1,6 @@
+[project]
+name = "fixture"
+languages = ["python", "typescript"]
+
+[modules]
+"src/pay/**" = "Payment"
