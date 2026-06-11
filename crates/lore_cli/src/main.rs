@@ -61,6 +61,13 @@ enum Command {
         #[arg(long, value_name = "N")]
         max_len: Option<usize>,
     },
+    /// Render the git change history of a node's subject span (§9.3)
+    History {
+        /// The node's qualified name, e.g. Payment.charge
+        qname: String,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() {
@@ -95,6 +102,10 @@ fn run(cli: Cli) -> i32 {
             Some(path) => {
                 commands::ask::run(&path, query, json, all, max_len, cli.quiet, cli.no_color)
             }
+            None => 2,
+        },
+        Command::History { ref qname, json } => match discover_manifest(&cli) {
+            Some(path) => commands::history::run(&path, qname, json, cli.quiet),
             None => 2,
         },
     }

@@ -240,6 +240,13 @@ fn show(graph: &Graph, arg: &QName) -> Result<Answer, String> {
     })))
 }
 
+/// Resolve a CLI-provided qname to its node, with the D-053a message on
+/// failure — shared with `lore history` (D-059a), which mirrors ask's
+/// exit-2 behavior for an argument naming no node.
+pub fn lookup<'g>(graph: &'g Graph, arg: &QName) -> Result<&'g IntentNode, String> {
+    resolve(graph, arg).map(|w| &graph.nodes[&w.qname])
+}
+
 /// A query argument must name a node; the message mirrors E0306 (D-053a).
 fn resolve(graph: &Graph, arg: &QName) -> Result<Witness, String> {
     if graph.nodes.contains_key(arg) {

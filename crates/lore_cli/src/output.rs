@@ -290,6 +290,69 @@ pub fn card_to_json(
     })
 }
 
+// ---- history (§9.3, D-059d) ----
+
+/// Header `history for <qname>  <file>:<start>-<end>: N commits` (dropped
+/// under --quiet), then per commit one line of 12-char hash, ISO author
+/// date, author, with the full message indented four spaces below.
+pub fn render_history(
+    qname: &str,
+    file: &std::path::Path,
+    start: u32,
+    end: u32,
+    commits: &[crate::commands::history::Commit],
+    quiet: bool,
+) -> String {
+    let mut out = String::new();
+    if !quiet {
+        let n = commits.len();
+        let plural = if n == 1 { "commit" } else { "commits" };
+        out.push_str(&format!(
+            "history for {qname}  {}:{start}-{end}: {n} {plural}\n",
+            file.display()
+        ));
+    }
+    for c in commits {
+        let short = &c.hash[..c.hash.len().min(12)];
+        out.push_str(&format!("{short}  {}  {}\n", c.date, c.author));
+        for line in c.message.lines() {
+            if line.is_empty() {
+                out.push('\n');
+            } else {
+                out.push_str(&format!("    {line}\n"));
+            }
+        }
+    }
+    out
+}
+
+pub fn history_to_json(
+    qname: &str,
+    file: &std::path::Path,
+    start: u32,
+    end: u32,
+    commits: &[crate::commands::history::Commit],
+) -> serde_json::Value {
+    let commits: Vec<serde_json::Value> = commits
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "hash": c.hash,
+                "author": c.author,
+                "date": c.date,
+                "message": c.message,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "lore_version": env!("CARGO_PKG_VERSION"),
+        "qname": qname,
+        "location": {"file": file.to_string_lossy(), "line": start},
+        "span": {"start": start, "end": end},
+        "commits": commits,
+    })
+}
+
 fn origin_name(node: &lore_intent::IntentNode) -> &'static str {
     match node.origin {
         lore_intent::Origin::Declared => "Declared",
