@@ -128,11 +128,11 @@ Exact semantics per clause. "Ref" clauses produce edges; "prose" clauses annotat
 
 **`purpose: "<string>"`** -- what the construct exists for. Prose. One occurrence max (`E0206` on repeat).
 
-**`owner: "<string>"`** -- responsible team. Prose, queryable. One occurrence. Cross-checked against CODEOWNERS when present (`W0207`, D-010).
+**`owner: "<string>"`** -- responsible team. Prose, queryable. One occurrence. Cross-checked against CODEOWNERS when present (`W0207`, D-010; mechanics per D-058).
 
 **`because: "<string>"`** -- why a non-obvious decision was made. Prose. Repeatable. On `Error` it is a required field of the error definition, not an intent clause.
 
-**`unknown: "<string>"`** -- what is unresolved, untested, or not understood. Prose. Repeatable. Severity per `[policy] unknown` (D-012).
+**`unknown: "<string>"`** -- what is unresolved, untested, or not understood. Prose. Repeatable. Each occurrence is surfaced by lint as `W0213`; severity per `[policy] unknown` (D-012, D-057).
 
 **`assumes: "<string>"`** -- what must be true of inputs or environment on entry (D-005). Prose. Repeatable. No resolution, no edges.
 
@@ -352,7 +352,7 @@ For each annotation block: let `t_subject = max(commit time over subject-span li
 
 ### 9.3 `lore history <qname>`
 
-Renders `git log -L <span_start>,<span_end>:<file>` for the node's subject span: hash, date, author, full message. This replaces the removed `changed:` clause (D-004).
+Renders `git log -L <span_start>,<span_end>:<file>` for the node's subject span: hash, date, author, full message. This replaces the removed `changed:` clause (D-004). Mechanics per D-059: the qname MUST name a graph node (exit 2 with the nearest existing qname otherwise, mirroring D-053a); outside a git work tree or on git failure, exit 2 with the underlying message; an empty log is an honest empty answer (exit 0). Supports `--json` (commit array: full hash, author, ISO-strict author date, full message).
 
 ---
 
@@ -454,7 +454,7 @@ undeclared_effects = "off"             # "off" | "warn"     (D-019)
 # "W0206" = "off"
 ```
 
-Unknown keys: `E0401`. A known key with an invalid value: `E0403` (D-043). Missing manifest: every command except `lore init` fails with `E0402` and the suggestion to run `lore init`.
+Unknown keys: `E0401`. A known key with an invalid value: `E0403` (D-043). Missing manifest: every command except `lore init` fails with `E0402` and the suggestion to run `lore init`. `[lint]` keys MUST be W-codes from the §18 registry (`E0401` otherwise -- E findings can never be silenced) and values `"warn"` or `"off"` (`E0403` otherwise); `"off"` suppresses the code from lint output and the exit-code computation, including strict-promoted instances, while `ask`/`show` stay unfiltered (D-056).
 
 ---
 
@@ -469,7 +469,7 @@ Single binary `lore` (crate `lore_cli`).
 | `lore ask "<query>" [--json] [--all --max-len N]` | §10 | T4 |
 | `lore lint [--json] [--no-stale]` | Resolution checks, required intent, applicability, depends_on surface, hygiene (`W0210`-`W0212`), reconciliation, staleness; exit per §10.5 | T3 (structural) → T7 (full) |
 | `lore stats [--json]` | Coverage: nodes by kind/origin, % declared intent per kind, claims by status, unresolved_calls count | T7 |
-| `lore history <qname>` | §9.3 | T5 |
+| `lore history <qname> [--json]` | §9.3 (D-059) | T5 |
 | `lore graph --dot [--focus <qname> --depth N]` | Graphviz export (D-038) | T8 |
 | `lore mcp` | MCP server (stdio): tools `lore_ask`, `lore_show`, `lore_lint`, `lore_history` mapping 1:1 to the JSON outputs (D-037) | T9 |
 | `lorec build / run` | Phase 2 compiler/VM driver | L1+ |
@@ -538,6 +538,11 @@ pub struct Graph {
     pub findings: Vec<Finding>,          // lore_intent::Finding -- E/W codes with spans (§18, D-040)
     pub attributions: HashMap<QName, Vec<usize>>, // node -> indices into findings (D-049 attribution, public per D-055)
 }
+
+// CODEOWNERS data passed into lore_graph::build by the CLI (D-058) --
+// the graph consumes it as data, never reading the filesystem itself.
+pub struct Codeowners { pub file: PathBuf, pub rules: Vec<CodeownersRule> }
+pub struct CodeownersRule { pub pattern: String, pub owners: Vec<String> }
 ```
 
 Dependency direction (no crate reaches backwards):
@@ -769,13 +774,13 @@ Every diagnostic MUST state: what went wrong (plain language), where (file:line 
 | Band | Area |
 |---|---|
 | E010x/W010x | Scanner & binder (`E0102` unbound annotation, `E0103` overlapping module globs, `E0104` ambiguous assignment target, `E0105` step outside workflow, `E0106` invalid kind value, `E0107` invalid name value, `E0108` scoping block missing name) |
-| E020x/W020x | Intent parsing & applicability (`E0201` missing required intent, `E0202` unknown clause, `E0203` illegal clause for kind, `E0204` empty step, `E0205` route outside service, `E0206` duplicate singular clause, `E0207` malformed clause, `W0205` intra-module triggers, `W0206` unused depends_on, `W0207` CODEOWNERS mismatch, `W0208` orphan file, `W0209` missing recommended purpose) |
+| E020x/W020x | Intent parsing & applicability (`E0201` missing required intent, `E0202` unknown clause, `E0203` illegal clause for kind, `E0204` empty step, `E0205` route outside service, `E0206` duplicate singular clause, `E0207` malformed clause, `W0205` intra-module triggers, `W0206` unused depends_on, `W0207` CODEOWNERS mismatch, `W0208` orphan file, `W0209` missing recommended purpose, `W0213` declared unknown -- D-057) |
 | E030x/W030x | Graph, reconciliation, hygiene (`E0302/W0302` contradicted claim, `E0304` undeclared dependency use, `E0305` duplicate qname, `E0306` unresolved ref, `E0307` wrong-kind ref, `W0301` stale intent, `W0303` undeclared effect, `W0210` orphaned state, `W0211` event without handlers, `W0212` event without emitters) |
 | E040x | Manifest (`E0401` unknown key, `E0402` missing manifest, `E0403` invalid manifest value) |
 | E05xx | Phase 2 semantics (§16) |
 | E06xx | VM/runtime (reserved) |
 
-Severity defaults are the letter (E/W); `lore.toml [lint]` may override W↔off and promote per `[policy]`; module `enforcement: strict` promotes that module's W findings from bands 02x/03x to errors (attribution and nearest-module rule per D-049).
+Severity defaults are the letter (E/W); `lore.toml [lint]` may override W↔off (domains and application point per D-056) and promote per `[policy]` (`unknown` promotes `W0213`, D-057; `stale` promotes `W0301` at T7); module `enforcement: strict` promotes that module's W findings from bands 02x/03x to errors (attribution and nearest-module rule per D-049).
 
 ---
 
