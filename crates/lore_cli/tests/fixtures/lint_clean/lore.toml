@@ -1,0 +1,6 @@
+[project]
+name = "lint_clean"
+languages = ["python"]
+
+[modules]
+"src/**" = "App"

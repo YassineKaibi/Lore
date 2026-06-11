@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      # T4 exit criterion: the §10.7 perf budget, measured on the release build
+      - run: cargo test -p lore_graph --release queries_over_a_5000_node_graph_answer_under_50ms
+      # G-12: the Lore repo annotates itself and lints in its own CI from T3
+      - run: cargo run -p lore_cli -- lint

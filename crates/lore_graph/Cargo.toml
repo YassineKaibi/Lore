@@ -1,0 +1,10 @@
+[package]
+name = "lore_graph"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lore_intent.workspace = true
+
+[lints]
+workspace = true
