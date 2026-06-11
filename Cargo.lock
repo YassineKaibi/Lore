@@ -310,6 +310,7 @@ dependencies = [
 name = "lore_graph"
 version = "0.2.0"
 dependencies = [
+ "globset",
  "lore_intent",
 ]
 

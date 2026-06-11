@@ -143,6 +143,7 @@ fn fixture() -> Graph {
             node("User.notify", Kind::Function, 2, Intent::default()),
         ],
         &mods(&["User"]),
+        None,
     )
 }
 
@@ -552,7 +553,11 @@ fn show_returns_the_card_with_grouped_edges_and_attributed_findings() {
         card.edges_in.iter().map(|e| e.kind).collect::<Vec<_>>(),
         [EdgeKind::Triggers, EdgeKind::Contains]
     );
-    assert!(card.findings.is_empty());
+    // the charge node's unknown clause surfaces as W0213 on its card (D-057)
+    assert_eq!(
+        card.findings.iter().map(|f| f.code).collect::<Vec<_>>(),
+        ["W0213"]
+    );
 
     // Payment.book carries W0205 (intra-module triggers) and E0306 (typo),
     // surfaced on the card per Graph.attributions (D-055)
@@ -607,7 +612,7 @@ fn queries_over_a_5000_node_graph_answer_under_50ms() {
         nodes.push(node(&format!("M{m}.s"), Kind::State, 1, s));
     }
     let name_refs: Vec<&str> = names.iter().map(String::as_str).collect();
-    let g = build(nodes, &mods(&name_refs));
+    let g = build(nodes, &mods(&name_refs), None);
     assert_eq!(g.nodes.len(), 5000);
 
     for query in ["reaches(M0.f0)", "affects*(M49.s)", "show(M25.f50)"] {

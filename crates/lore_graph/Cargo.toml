@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 lore_intent.workspace = true
+# CODEOWNERS pattern matching (D-058c)
+globset.workspace = true
 
 [lints]
 workspace = true

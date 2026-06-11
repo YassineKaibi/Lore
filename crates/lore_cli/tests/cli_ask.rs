@@ -121,7 +121,10 @@ fn show_renders_the_full_node_card() {
          \x20 Reads -> Payment.balances  [Declared/Unverifiable]\n\
          \x20 Emits -> Payment.Settled  [Declared/Unverifiable]\n\
          edges in:\n\
-         \x20 Contains <- Payment  [Derived/Exact]\n"
+         \x20 Contains <- Payment  [Derived/Exact]\n\
+         findings:\n\
+         \x20 W0213 src/pay/svc.py:21  function \"Payment.charge\" declares an unknown: \
+         \"Concurrent charge + refund untested\"; resolve it and remove the clause once it is answered\n"
     );
 }
 

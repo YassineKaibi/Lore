@@ -87,6 +87,7 @@ fn duplicate_qname_is_e0305_and_first_declaration_wins() {
             node("Payment.charge", Kind::Function, 9, Intent::default()),
         ],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), [("E0305", 9)]);
     assert!(g.findings[0].message.contains("\"Payment.charge\""));
@@ -109,6 +110,7 @@ fn unresolved_ref_is_e0306_naming_the_nearest_qname() {
             node("Payment.charge", Kind::Function, 11, intent),
         ],
         &mods(&["Payment"]),
+        None,
     );
     // The failed ref cascades honestly: ledger is now orphaned (W0210).
     assert_eq!(findings(&g), [("W0210", 2), ("E0306", 12)]);
@@ -129,6 +131,7 @@ fn wrong_kind_ref_is_e0307_naming_both_kinds() {
             node("Payment.charge", Kind::Function, 4, intent),
         ],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), [("E0307", 5)]);
     assert_eq!(
@@ -146,7 +149,11 @@ fn refs_in_an_illegal_clause_are_not_resolved() {
     intent.purpose = Some(prose("Payments", 2));
     intent.owner = Some(prose("payments-team", 3));
     intent.affects = vec![r("Nowhere.x", 4)];
-    let g = build(vec![node("Payment", Kind::Module, 1, intent)], &mods(&[]));
+    let g = build(
+        vec![node("Payment", Kind::Module, 1, intent)],
+        &mods(&[]),
+        None,
+    );
     assert_eq!(findings(&g), [("E0203", 4)]);
     assert!(edges_from(&g, "Payment").is_empty());
 }
@@ -158,6 +165,7 @@ fn module_block_missing_purpose_and_owner_is_e0201_twice() {
     let g = build(
         vec![node("Payment", Kind::Module, 1, Intent::default())],
         &mods(&[]),
+        None,
     );
     assert_eq!(findings(&g), [("E0201", 1), ("E0201", 1)]);
     // same span and code: message order breaks the tie deterministically
@@ -167,7 +175,7 @@ fn module_block_missing_purpose_and_owner_is_e0201_twice() {
 
 #[test]
 fn manifest_only_modules_are_exempt_from_required_intent() {
-    let g = build(vec![], &mods(&["Payment", "User"]));
+    let g = build(vec![], &mods(&["Payment", "User"]), None);
     assert_eq!(findings(&g), []);
     assert_eq!(g.nodes.len(), 2);
     assert_eq!(g.nodes[&QName::from_dotted("Payment")].kind, Kind::Module);
@@ -181,6 +189,7 @@ fn owner_on_event_is_e0203_with_the_inheritance_message() {
     let g = build(
         vec![node("Payment.Settled", Kind::Event, 1, intent)],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), [("E0203", 3)]);
     assert!(
@@ -201,6 +210,7 @@ fn empty_step_is_e0204() {
             node("Onboarding.collect", Kind::Step, 4, Intent::default()),
         ],
         &mods(&[]),
+        None,
     );
     assert_eq!(findings(&g), [("E0204", 4)]);
     assert!(g.findings[0].message.contains("\"Onboarding.collect\""));
@@ -219,6 +229,7 @@ fn route_on_a_function_outside_a_service_is_e0205() {
     let g = build(
         vec![node("Payment.charge", Kind::Function, 5, handler)],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), [("E0205", 6)]);
     assert!(g.findings[0].message.contains("its parent is a module"));
@@ -250,6 +261,7 @@ fn route_on_a_function_under_a_service_is_legal() {
             node("PaymentService.charge", Kind::Function, 5, handler),
         ],
         &mods(&[]),
+        None,
     );
     assert_eq!(findings(&g), []);
 }
@@ -265,6 +277,7 @@ fn state_without_purpose_is_w0209_and_error_without_because_is_e0201() {
             node("Payment.charge", Kind::Function, 8, touch),
         ],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), [("W0209", 2), ("E0201", 5)]);
     assert!(g.findings[1].message.contains("\"because\""));
@@ -282,6 +295,7 @@ fn cross_module_ref_without_depends_on_is_e0304() {
             node("Payment.charge", Kind::Function, 6, charge),
         ],
         &mods(&["Payment", "User"]),
+        None,
     );
     assert_eq!(findings(&g), [("E0304", 7)]);
     assert!(g.findings[0].message.contains("declare depends_on: User"));
@@ -304,6 +318,7 @@ fn depends_on_of_a_container_satisfies_and_counts_as_used() {
             node("Payment.charge", Kind::Function, 6, charge),
         ],
         &mods(&["User"]),
+        None,
     );
     assert_eq!(findings(&g), []); // no E0304, no W0206
 }
@@ -329,6 +344,7 @@ fn depends_on_an_owning_module_satisfies_a_ref_to_a_nested_target() {
             node("Payment.charge", Kind::Function, 6, charge),
         ],
         &mods(&["User"]),
+        None,
     );
     assert_eq!(findings(&g), []);
 }
@@ -342,6 +358,7 @@ fn unused_depends_on_is_w0206() {
     let g = build(
         vec![node("Payment", Kind::Module, 1, payment)],
         &mods(&["User"]),
+        None,
     );
     assert_eq!(findings(&g), [("W0206", 3)]);
     assert!(g.findings[0].message.contains("depends_on: User"));
@@ -357,6 +374,7 @@ fn intra_module_triggers_is_w0205_and_module_local_refs_need_no_depends_on() {
             node("Payment.charge", Kind::Function, 6, charge),
         ],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), [("W0205", 7)]); // and no E0304
 }
@@ -384,6 +402,7 @@ fn event_hygiene_w0211_w0212_and_silent_when_unused() {
             node("Payment.book", Kind::Function, 11, handler),
         ],
         &mods(&["Payment"]),
+        None,
     );
     // D-026: W0211 needs an emitter, W0212 a handler; a dead event gets neither.
     assert_eq!(findings(&g), [("W0211", 1), ("W0212", 3)]);
@@ -403,6 +422,7 @@ fn claim_edges_are_declared_and_unverifiable_until_derivation_exists() {
             node("Payment.charge", Kind::Function, 6, charge),
         ],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), []);
     let edges = edges_from(&g, "Payment.charge");
@@ -434,6 +454,7 @@ fn contains_and_sequence_edges_are_derived_exact() {
             node("Payment.charge", Kind::Function, 2, Intent::default()),
         ],
         &mods(&["Payment"]),
+        None,
     );
     assert_eq!(findings(&g), []);
     let wf_edges = edges_from(&g, "Onboarding");
@@ -478,6 +499,7 @@ fn strict_module_promotes_w_findings_to_errors_with_the_code_unchanged() {
     let g = build(
         vec![node("Payment", Kind::Module, 1, payment)],
         &mods(&["User"]),
+        None,
     );
     assert_eq!(findings(&g), [("W0206", 4)]);
     assert_eq!(g.findings[0].severity, Severity::Error);
@@ -501,6 +523,7 @@ fn strict_is_not_inherited_by_nested_modules() {
             node("Payment.Refunds.queue", Kind::State, 8, state), // orphaned -> W0210
         ],
         &mods(&[]),
+        None,
     );
     assert_eq!(findings(&g), [("W0210", 8)]);
     assert_eq!(g.findings[0].severity, Severity::Warning); // nearest module is not strict
@@ -520,6 +543,7 @@ fn findings_come_out_sorted_by_file_line_col_code() {
             node("Payment.charge", Kind::Function, 8, charge),
         ],
         &mods(&["Payment", "User"]),
+        None,
     );
     let a = findings(&g);
     let reordered = build(
@@ -534,7 +558,160 @@ fn findings_come_out_sorted_by_file_line_col_code() {
             node("User.notify", Kind::Function, 1, Intent::default()),
         ],
         &mods(&["User", "Payment"]),
+        None,
     );
     assert_eq!(a, findings(&reordered)); // input order never changes the output
     assert_eq!(a, [("E0304", 3), ("W0209", 5), ("W0210", 5), ("E0306", 9)]);
+}
+
+// ---- W0213: declared unknowns (D-057) ----
+
+#[test]
+fn unknown_clauses_surface_as_w0213_per_occurrence() {
+    let mut intent = Intent::default();
+    intent.unknown = vec![
+        prose("Concurrency untested", 4),
+        prose("Retry behavior unclear", 5),
+    ];
+    let g = build(
+        vec![node("Payment.charge", Kind::Function, 6, intent)],
+        &mods(&["Payment"]),
+        None,
+    );
+    assert_eq!(findings(&g), [("W0213", 4), ("W0213", 5)]);
+    assert_eq!(g.findings[0].severity, Severity::Warning);
+    assert_eq!(
+        g.findings[0].message,
+        "function \"Payment.charge\" declares an unknown: \"Concurrency untested\"; resolve it and remove the clause once it is answered"
+    );
+    // attributed to the node so show(X) renders it (D-055, D-057)
+    assert_eq!(
+        g.attributions[&QName::from_dotted("Payment.charge")],
+        [0, 1]
+    );
+}
+
+#[test]
+fn strict_module_promotes_w0213_to_error() {
+    let mut module = Intent::default();
+    module.purpose = Some(prose("Money", 1));
+    module.owner = Some(prose("payments-team", 2));
+    module.enforcement = Some(spanned(Enforcement::Strict, 3));
+    let mut f = Intent::default();
+    f.unknown = vec![prose("Idempotency unverified", 8)];
+    let g = build(
+        vec![
+            node("Payment", Kind::Module, 1, module),
+            node("Payment.charge", Kind::Function, 9, f),
+        ],
+        &mods(&[]),
+        None,
+    );
+    assert_eq!(findings(&g), [("W0213", 8)]);
+    assert_eq!(g.findings[0].severity, Severity::Error); // D-049 band 02x
+}
+
+// ---- W0207: CODEOWNERS cross-check (D-010, D-058) ----
+
+fn owner_node(owner: &str) -> IntentNode {
+    let mut intent = Intent::default();
+    intent.owner = Some(prose(owner, 2));
+    node("Payment.charge", Kind::Function, 3, intent)
+}
+
+fn co(lines: &str) -> lore_graph::Codeowners {
+    lore_graph::codeowners::parse(".github/CODEOWNERS".into(), lines)
+}
+
+#[test]
+fn codeowners_mismatch_is_w0207_on_the_owner_clause() {
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&co("* @acme/platform\n")),
+    );
+    assert_eq!(findings(&g), [("W0207", 2)]);
+    assert_eq!(
+        g.findings[0].message,
+        "owner \"payments-team\" on \"Payment.charge\" disagrees with .github/CODEOWNERS, which maps src/a.py to @acme/platform; align the owner clause or CODEOWNERS"
+    );
+}
+
+#[test]
+fn codeowners_org_team_token_matches_case_insensitively() {
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&co("* @acme/Payments-Team\n")),
+    );
+    assert_eq!(findings(&g), []);
+}
+
+#[test]
+fn codeowners_last_matching_rule_wins() {
+    // file is src/a.py (test fixture span); the later, more specific rule wins
+    let mismatch_last = co("* @acme/payments-team\n/src/ @acme/platform\n");
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&mismatch_last),
+    );
+    assert_eq!(findings(&g), [("W0207", 2)]);
+
+    let match_last = co("* @acme/platform\n/src/ @acme/payments-team\n");
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&match_last),
+    );
+    assert_eq!(findings(&g), []);
+}
+
+#[test]
+fn codeowners_rule_without_owners_never_fires() {
+    // an explicitly-unowned path contradicts nothing (D-058e)
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&co("/src/\n")),
+    );
+    assert_eq!(findings(&g), []);
+}
+
+#[test]
+fn codeowners_unanchored_pattern_matches_at_any_depth_anchored_does_not() {
+    // file is src/a.py; "a.py" floats, "/a.py" is root-anchored
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&co("a.py @acme/platform\n")),
+    );
+    assert_eq!(findings(&g), [("W0207", 2)]);
+
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&co("/a.py @acme/platform\n")),
+    );
+    assert_eq!(findings(&g), []);
+}
+
+#[test]
+fn codeowners_comments_and_blanks_are_skipped() {
+    let g = build(
+        vec![owner_node("payments-team")],
+        &mods(&["Payment"]),
+        Some(&co("# owners\n\n* @acme/platform # platform owns all\n")),
+    );
+    assert_eq!(findings(&g), [("W0207", 2)]);
+}
+
+#[test]
+fn nodes_without_a_declared_owner_are_not_checked() {
+    let g = build(
+        vec![node("Payment.charge", Kind::Function, 3, Intent::default())],
+        &mods(&["Payment"]),
+        Some(&co("* @acme/platform\n")),
+    );
+    assert_eq!(findings(&g), []);
 }

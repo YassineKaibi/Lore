@@ -129,7 +129,23 @@ pub fn build_graph(p: &Project, manifest_path: &Path) -> (lore_graph::Graph, Vec
         });
     }
 
-    (lore_graph::build(nodes, &manifest_modules), findings)
+    let codeowners = discover_codeowners(manifest_path.parent().unwrap_or(Path::new(".")));
+    (
+        lore_graph::build(nodes, &manifest_modules, codeowners.as_ref()),
+        findings,
+    )
+}
+
+/// D-058a: first existing of .github/CODEOWNERS, CODEOWNERS,
+/// docs/CODEOWNERS (GitHub's search order), parsed for the W0207
+/// cross-check. The stored path stays root-relative for messages.
+fn discover_codeowners(root: &Path) -> Option<lore_graph::Codeowners> {
+    [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"]
+        .iter()
+        .find_map(|rel| {
+            let text = std::fs::read_to_string(root.join(rel)).ok()?;
+            Some(lore_graph::codeowners::parse(PathBuf::from(rel), &text))
+        })
 }
 
 fn collect_sources(root: &Path, dir: &Path, active: &BTreeSet<&str>, out: &mut Vec<PathBuf>) {

@@ -3,6 +3,7 @@
 //! promotion. Consumes data from lore_annotations/lore_derive — never the
 //! crates themselves (§13 dependency direction).
 
+pub mod codeowners;
 mod engine;
 pub mod exec;
 mod hygiene;
@@ -14,6 +15,7 @@ mod surface;
 mod table;
 mod util;
 
+pub use codeowners::{Codeowners, CodeownersRule};
 pub use engine::{Direction, Hop, Mode, Traversal, Witness};
 
 use std::collections::HashMap;
@@ -227,7 +229,11 @@ pub(crate) fn is_prefix_of(p: &QName, q: &QName) -> bool {
 // @lore
 // purpose: "Build the intent graph from the declared layer: node table, structural edges, resolution, and the structural lint findings"
 // because: "Claim statuses are all Unverifiable until lore_derive lands at T6: the derivation scope is empty, which is the §9.1 algorithm applied, not a shortcut (D-047)"
-pub fn build(declared: Vec<IntentNode>, manifest_modules: &[Spanned<String>]) -> Graph {
+pub fn build(
+    declared: Vec<IntentNode>,
+    manifest_modules: &[Spanned<String>],
+    codeowners: Option<&Codeowners>,
+) -> Graph {
     let mut findings: Vec<OwnedFinding> = Vec::new();
     let ctx = table::build(declared, manifest_modules, &mut findings);
 
@@ -236,6 +242,10 @@ pub fn build(declared: Vec<IntentNode>, manifest_modules: &[Spanned<String>]) ->
     edges.extend(structure::derive(&ctx));
     surface::check(&ctx, &edges, &mut findings);
     hygiene::check(&ctx, &edges, &mut findings);
+    if let Some(co) = codeowners {
+        codeowners::check(&ctx, co, &mut findings);
+    }
+    surface_unknowns(&ctx, &mut findings);
 
     promote_strict(&ctx, &mut findings);
 
@@ -271,6 +281,30 @@ pub fn build(declared: Vec<IntentNode>, manifest_modules: &[Spanned<String>]) ->
         inc: rev,
         findings: out,
         attributions,
+    }
+}
+
+/// D-057: every declared unknown becomes a W0213, attributed to its node —
+/// so strict promotion applies here and `show(X)` renders it. Promotion to
+/// error under `[policy] unknown = "error"` happens at the lint surface,
+/// where the manifest lives; the graph always carries the base Warning.
+fn surface_unknowns(ctx: &Ctx, findings: &mut Vec<OwnedFinding>) {
+    for qname in &ctx.order {
+        let node = &ctx.nodes[qname];
+        for u in &node.intent.unknown {
+            findings.push(OwnedFinding::new(
+                Finding::new(
+                    "W0213",
+                    u.span.clone(),
+                    format!(
+                        "{} \"{qname}\" declares an unknown: \"{}\"; resolve it and remove the clause once it is answered",
+                        node.kind.name(),
+                        u.value
+                    ),
+                ),
+                qname,
+            ));
+        }
     }
 }
 
