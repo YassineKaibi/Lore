@@ -50,7 +50,7 @@ Each milestone lists: scope, out of scope, exit criteria (binding -- a milestone
 **Scope:** `lore_derive` per §8: derived nodes, `Calls` edges with Exact/Resolved resolution and drop-rule, state-touch `Affects`/`Reads` with mutator tables, confidence labeling end to end (queries now traverse `Calls`; outputs print confidence). Parse cache (G-9). Open-world resolution (D-017) switched on.
 **Exit criteria:**
 - Fixture suites per language assert exact derived edge sets **including required absences** (calls that must be dropped -- G-7 negative tests).
-- `lore ask affects(X)` returns correct results on a fixture repo with **zero annotations**.
+- `lore ask` call-graph queries return correct results on a fixture repo with **zero annotations**; `affects(X)` is exercised with only X's own state annotation (state touches presuppose declared State nodes, D-060).
 - `lore stats` reports `unresolved_calls` and per-kind node counts.
 - Full pipeline on a 20k-LOC OSS Python repo completes < 10 s cold, < 1 s warm cache.
 **Spec:** §8, §10.7.
