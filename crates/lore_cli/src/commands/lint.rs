@@ -1,7 +1,8 @@
-//! `lore lint` (§12), structural subset at T3: scanner/binder findings,
-//! clause parsing, then the lore_graph checks — resolution, applicability,
-//! depends_on surface, hygiene, strict promotion. Reconciliation and
-//! staleness arrive at T7.
+//! `lore lint` (§12), structural subset at T3, hardened for CI at T5:
+//! scanner/binder findings, clause parsing, then the lore_graph checks —
+//! resolution, applicability, depends_on surface, hygiene, CODEOWNERS,
+//! strict promotion — then `[policy]` promotion and `[lint]` overrides
+//! (D-056, D-057). Reconciliation and staleness arrive at T7.
 
 use std::path::Path;
 
@@ -9,6 +10,7 @@ use lore_intent::Severity;
 
 use crate::commands::project;
 use crate::output;
+use lore_cli::manifest::{LintLevel, PolicyLevel};
 
 // @lore
 // name: lint
@@ -23,6 +25,27 @@ pub fn run(manifest_path: &Path, json: bool, no_stale: bool, quiet: bool, no_col
 
     let (graph, mut findings) = project::build_graph(&p, manifest_path);
     findings.extend(graph.findings.iter().cloned());
+
+    // D-057: [policy] unknown = "error" promotes W0213 (code unchanged,
+    // mirroring D-049). Applied here — the policy lives in the manifest,
+    // so the graph carries the base Warning.
+    if matches!(p.manifest.policy.unknown, PolicyLevel::Error) {
+        for f in findings.iter_mut().filter(|f| f.code == "W0213") {
+            f.severity = Severity::Error;
+        }
+    }
+
+    // D-056: [lint] overrides, after promotion. "off" suppresses the code
+    // everywhere, including promoted instances; "warn" restates the default.
+    let off: Vec<&str> = p
+        .manifest
+        .lint_overrides
+        .iter()
+        .filter(|(_, level)| *level == LintLevel::Off)
+        .map(|(code, _)| code.as_str())
+        .collect();
+    findings.retain(|f| !off.contains(&f.code));
+
     findings.sort_by(|a, b| {
         (&a.span.file, a.span.line, a.span.col, a.code, &a.message).cmp(&(
             &b.span.file,

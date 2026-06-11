@@ -1,0 +1,9 @@
+[project]
+name = "policy_unknown"
+languages = ["python"]
+
+[modules]
+"src/**" = "Payment"
+
+[policy]
+unknown = "error"

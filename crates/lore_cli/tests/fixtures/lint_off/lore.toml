@@ -1,0 +1,10 @@
+[project]
+name = "lint_off"
+languages = ["python"]
+
+[modules]
+"src/**" = "App"
+
+[lint]
+"W0209" = "off"
+"W0210" = "off"

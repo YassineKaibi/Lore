@@ -45,6 +45,43 @@ fn syntactically_invalid_toml_is_e0403() {
 }
 
 #[test]
+fn lint_override_of_an_e_code_is_e0401() {
+    // D-056a: E findings can never be silenced
+    let err = p("[project]\nname = \"x\"\n[lint]\n\"E0306\" = \"off\"\n").unwrap_err();
+    assert_eq!(err.code, "E0401");
+    assert!(err.message.contains("E0306"));
+    assert!(err.message.contains("W-codes"));
+}
+
+#[test]
+fn lint_override_of_a_typoed_w_code_is_e0401() {
+    // D-056a: a typo'd code must fail loudly, not silently fail to suppress
+    let err = p("[project]\nname = \"x\"\n[lint]\n\"W0260\" = \"off\"\n").unwrap_err();
+    assert_eq!(err.code, "E0401");
+    assert!(err.message.contains("W0260"));
+}
+
+#[test]
+fn lint_override_with_a_bad_level_is_e0403() {
+    let err = p("[project]\nname = \"x\"\n[lint]\n\"W0206\" = \"error\"\n").unwrap_err();
+    assert_eq!(err.code, "E0403");
+    assert!(err.message.contains("\"warn\" or \"off\""));
+}
+
+#[test]
+fn lint_overrides_parse() {
+    let m =
+        p("[project]\nname = \"x\"\n[lint]\n\"W0206\" = \"off\"\n\"W0209\" = \"warn\"\n").unwrap();
+    assert_eq!(
+        m.lint_overrides,
+        [
+            ("W0206".to_string(), manifest::LintLevel::Off),
+            ("W0209".to_string(), manifest::LintLevel::Warn),
+        ]
+    );
+}
+
+#[test]
 fn defaults_apply() {
     let m = p("[project]\nname = \"x\"\nlanguages = [\"python\"]\n").unwrap();
     assert_eq!(m.roots, vec!["src"]);

@@ -14,7 +14,7 @@ pub struct Manifest {
     pub roots: Vec<String>,     // default ["src"]
     pub modules: Vec<lore_annotations::ModuleGlob>, // TOML order preserved
     pub policy: Policy,
-    pub lint_overrides: Vec<(String, String)>, // raw; consumed at T3+
+    pub lint_overrides: Vec<(String, LintLevel)>, // W-code -> level (D-056)
 }
 
 #[derive(Debug)]
@@ -34,7 +34,22 @@ pub enum UndeclaredEffects {
     Warn,
 }
 
+/// `[lint]` override level (D-056): "warn" restates the default, "off"
+/// suppresses the code from lint output and the exit-code computation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LintLevel {
+    Warn,
+    Off,
+}
+
 pub const LANGUAGES: [&str; 5] = ["python", "typescript", "go", "java", "rust"];
+
+/// The W-codes of the §18 registry: the legal `[lint]` key space (D-056a).
+/// Grows with §18 in the same PR (G-5).
+pub const W_CODES: [&str; 12] = [
+    "W0205", "W0206", "W0207", "W0208", "W0209", "W0210", "W0211", "W0212", "W0213", "W0301",
+    "W0302", "W0303",
+];
 
 const VALID_KEYS: &str = "valid keys: [project] name/languages/roots, [modules] \"<glob>\" = \"<Module>\", [policy] unknown/stale/undeclared_effects, [lint] \"<code>\" = \"<level>\"";
 
@@ -178,10 +193,32 @@ pub fn parse(path: &Path, text: &str) -> Result<Manifest, Finding> {
                     .as_table()
                     .ok_or_else(|| invalid("lint", "expected a table".into()))?;
                 for (code, v) in table {
-                    let level = v
-                        .as_str()
-                        .ok_or_else(|| invalid(code, "a lint level must be a string".into()))?;
-                    m.lint_overrides.push((code.clone(), level.to_string()));
+                    // D-056a: only registry W-codes can be overridden — E
+                    // findings can never be silenced, and a typo'd code must
+                    // fail loudly rather than silently fail to suppress.
+                    if !W_CODES.contains(&code.as_str()) {
+                        return Err(Finding::new(
+                            "E0401",
+                            span(),
+                            format!(
+                                "unknown key \"{code}\" in lore.toml [lint]; only §18 W-codes can be overridden ({})",
+                                W_CODES.join(", ")
+                            ),
+                        ));
+                    }
+                    let level = match string_value(code, v, &invalid)?.as_str() {
+                        "warn" => LintLevel::Warn,
+                        "off" => LintLevel::Off,
+                        other => {
+                            return Err(invalid(
+                                code,
+                                format!(
+                                    "\"{other}\" is not a lint level; expected \"warn\" or \"off\""
+                                ),
+                            ));
+                        }
+                    };
+                    m.lint_overrides.push((code.clone(), level));
                 }
             }
             other => return Err(unknown_key(other)),

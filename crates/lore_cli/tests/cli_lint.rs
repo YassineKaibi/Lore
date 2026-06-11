@@ -82,3 +82,49 @@ fn lint_without_manifest_is_e0402_exit_2() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("E0402"));
 }
+
+// ---- T5 CI hardening: [policy] unknown, [lint] overrides, W0207 ----
+
+#[test]
+fn policy_unknown_error_promotes_w0213_and_fails_lint() {
+    let out = lore(&["lint", "--json"], &fixture("policy_unknown"));
+    assert_eq!(out.status.code(), Some(1));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let findings = v["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1);
+    // D-057: severity promoted, code unchanged
+    assert_eq!(findings[0]["code"], "W0213");
+    assert_eq!(findings[0]["severity"], "error");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("\"Concurrency untested\"")
+    );
+    assert_eq!(v["summary"], serde_json::json!({"errors": 1, "warnings": 0}));
+}
+
+#[test]
+fn lint_off_overrides_suppress_findings_and_the_exit_surface() {
+    // the fixture state would carry W0209 + W0210; both are off (D-056b)
+    let out = lore(&["lint", "--no-color"], &fixture("lint_off"));
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "lint: 2 nodes, 1 edges, 0 findings (0 errors, 0 warnings)\n"
+    );
+}
+
+#[test]
+fn codeowners_disagreement_is_w0207() {
+    let out = lore(&["lint", "--json"], &fixture("codeowners_project"));
+    assert_eq!(out.status.code(), Some(0)); // a warning, not an error
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let findings = v["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["code"], "W0207");
+    assert_eq!(
+        findings[0]["message"],
+        "owner \"payments-team\" on \"Payment.charge\" disagrees with CODEOWNERS, which maps src/svc.py to @acme/platform; align the owner clause or CODEOWNERS"
+    );
+}
