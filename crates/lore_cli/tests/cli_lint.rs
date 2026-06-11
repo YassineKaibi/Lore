@@ -101,7 +101,10 @@ fn policy_unknown_error_promotes_w0213_and_fails_lint() {
             .unwrap()
             .contains("\"Concurrency untested\"")
     );
-    assert_eq!(v["summary"], serde_json::json!({"errors": 1, "warnings": 0}));
+    assert_eq!(
+        v["summary"],
+        serde_json::json!({"errors": 1, "warnings": 0})
+    );
 }
 
 #[test]
@@ -126,5 +129,20 @@ fn codeowners_disagreement_is_w0207() {
     assert_eq!(
         findings[0]["message"],
         "owner \"payments-team\" on \"Payment.charge\" disagrees with CODEOWNERS, which maps src/svc.py to @acme/platform; align the owner clause or CODEOWNERS"
+    );
+}
+
+#[test]
+fn ci_sample_project_fails_on_its_seeded_e0201() {
+    // pins the T5 exit criterion locally: examples/ci-sample is the project
+    // the lint-example workflow gates on, and its seeded finding must stay
+    let sample = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/ci-sample");
+    let out = lore(&["lint", "--no-color"], &sample);
+    assert_eq!(out.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("E0201 src/api.py:4")
+            && stdout.contains("service \"BillingApi\" is missing required \"owner\""),
+        "stdout: {stdout}"
     );
 }

@@ -1,0 +1,6 @@
+[project]
+name = "ci-sample"
+languages = ["python"]
+
+[modules]
+"src/**" = "Billing"
