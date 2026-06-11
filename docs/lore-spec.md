@@ -55,7 +55,7 @@ A developer has never been able to ask their system a question and trust the ans
 | **Subject span** | The source line range of the subject declaration, including its body, as reported by tree-sitter. |
 | **Edge** | Directed, typed connection between nodes. Carries `EdgeKind`, origin layer, `ClaimStatus` (declared edges), `Confidence` (derived edges), `SourceLoc`. |
 | **Claim** | A declared edge; an assertion by a human, subject to reconciliation. |
-| **Derivation scope** | The set of files mapped to modules by `lore.toml` whose language has derived-layer support. |
+| **Derivation scope** | The set of files assigned a module by either §7.5 mechanism whose language has derived-layer support (D-061). |
 | **Intent block** | The run of intent clauses attached to a node (between comment marker and subject in P1; between signature and `{` in P2). |
 
 ---
@@ -288,7 +288,7 @@ Crate: `lore_derive`. Input: the files in derivation scope. Output: derived node
 
 ### 8.1 Derived nodes
 
-Every declaration-table node (§7.4) in scope becomes a derived node: functions/methods → `Function`, classes/structs/enums/interfaces/type aliases → `Type`. qname = module (from §7.5) + host identifier. A derived node that collides with a declared node of the same qname merges into one node with origin `Both` (this is the normal annotated case). Same-qname collisions between two distinct declarations: `E0305`.
+Every declaration-table node (§7.4) in scope becomes a derived node: functions/methods → `Function`, classes/structs/enums/interfaces/type aliases → `Type`; value-binding forms (Python `assignment`, TS `lexical_declaration`/`variable_declaration`) derive no node and enter the graph only via annotation (D-060a). Nested functions and methods derive too. qname = module (from §7.5) + host identifier, flat regardless of nesting (D-060b). A derived node that collides with a declared node of the same qname **and the same declaration** (same file, same declaration start line) merges into one node with origin `Both` (this is the normal annotated case); the declared kind, intent, and loc win. A collision with a declared node of a *different* declaration is `E0305` (the derived node and its edges are dropped). Collisions among derived-only declarations produce no finding: all colliding declarations and their edges are excluded and counted in `lore stats` as `ambiguous_derived_names` (D-060d).
 
 ### 8.2 Derived `Calls` edges
 
@@ -297,7 +297,9 @@ For every call expression inside a function body, resolve the callee:
 2. **Resolved:** callee is imported, and the import resolves (per-language rules below) to a file inside derivation scope. Confidence `Resolved`.
 3. Otherwise: **dropped**, counted in `lore stats` as `unresolved_calls`. Never guess (D-020).
 
-Import resolution v1: Python -- `import m` / `from m import n` against the project source root(s) in `lore.toml [project] roots`; TypeScript -- relative imports only (`./`, `../`); Go -- same-package files + intra-module import paths; Java -- same package + explicit single-type imports; Rust -- `use crate::...` paths within the workspace. Anything else (aliases beyond one level, dynamic import, re-exports, star imports) is out of v1 scope and falls to rule 3.
+Import resolution v1: Python -- `import m [as a]` / `from m import n [as a]` against the project source root(s) in `lore.toml [project] roots` (relative imports drop); TypeScript -- relative imports only (`./`, `../`, resolving `<p>.ts|.tsx|.js` or `<p>/index.ts`), named (`{ n [as a] }`) and namespace (`* as m`) forms (default imports drop); Go -- same-package files + intra-module import paths; Java -- same package + explicit single-type imports; Rust -- `use crate::...` paths within the workspace. Anything else (aliases beyond one level, dynamic import, re-exports, star imports, dotted callees deeper than `alias.name(...)`) is out of v1 scope and falls to rule 3 (D-062c).
+
+Every call and state touch attributes to the nearest enclosing derived `Function` node; a call with no such node (module/class level, value-bound lambdas, declarations dropped per D-060d), or one resolving to a non-`Function` node, is dropped and counted in `unresolved_calls` (D-062a/b).
 
 Method calls (`obj.method(...)`) resolve only when `obj` is a same-file/module class instance whose type is syntactically evident (direct construction in the same function); otherwise dropped. *Note: this is deliberately conservative -- a dropped edge is invisible, a wrong edge is poison.*
 
@@ -308,6 +310,8 @@ Targets: host symbols bound to `State` nodes. Scope: files of the owning module 
 - **Write** if the symbol occurrence matches the per-language mutator pattern set: assignment / augmented assignment to the symbol, or a method call on the symbol from the mutator list (Python list/dict/set: `append extend insert remove pop clear update setdefault sort reverse add discard`; TS array/map/set: `push pop shift unshift splice sort reverse fill set delete clear add`; Go: assignment, `append(sym, ...)` re-assigned, map index assignment, `delete(sym, ...)`; Java: assignment plus `add addAll put putAll remove clear set sort`; Rust: assignment, `push insert remove clear extend sort` on the symbol or `&mut` borrow passed onward).
 - **Read** for any other occurrence of the symbol.
 - Confidence: `Heuristic`, always.
+
+Occurrence matching (D-062d): the symbol matches bare in same-language files of the owning module, bare via a named import of it, or as `alias.identifier` via a whole-module/namespace import -- the import forms only when the import resolves to the state's defining file. Occurrences with no enclosing derived function produce no edge (nothing to attribute). Touch edges dedupe to one per (function, state, kind); the first occurrence's span wins.
 
 ### 8.4 Confidence (D-020)
 
@@ -322,6 +326,8 @@ Every surface that prints a derived edge MUST print its confidence. `Heuristic` 
 ### 8.5 Implementation note
 
 Each language contributes: (a) a tree-sitter grammar dependency, (b) declaration queries (`.scm`), (c) call-expression queries, (d) import-resolution rules, (e) a mutator list. These five artifacts per language live under `lore_derive/src/lang/<name>/` and are the complete definition of language support.
+
+The parse cache (§10.7, G-9) stores per-file extraction facts keyed by content hash, not serialized trees; all cross-file resolution is recomputed from facts every run (D-064).
 
 ---
 
@@ -343,6 +349,8 @@ else                                                -> Unverified
 ```
 
 `Emits`/`Handles`/`DependsOn` claims: `Unverifiable` in Phase 1 (Phase 2 verifies all of them). "Matching derived edge" for `Triggers` means a derived `Calls` edge f→t; for `Affects`/`Reads`, a derived edge of the same kind f→t.
+
+*Note (transitional, D-063):* between T6 and T7 the algorithm runs without its `Contradicted` branch -- a claim that branch would catch surfaces as `Unverified`, and no `W0302`/`E0302` is emitted before T7.
 
 **Undeclared effects:** a derived `Affects` edge from an *annotated* function with no corresponding declaration → `W0303`, default off via `[policy] undeclared_effects = "off"` (D-019). Unannotated functions are never penalized.
 
@@ -427,7 +435,7 @@ The engine exposes two primitives: `select(predicate) -> NodeSet` and `traverse(
 
 ### 10.7 Performance contract
 
-The graph is held in memory: `HashMap<QName, Node>` plus forward and reverse adjacency `HashMap<QName, Vec<Edge>>` (both directions stored -- queries read both). Single-hop queries are O(degree); transitive queries are BFS, O(V+E). Target: any query over a 5,000-node graph answers in <50 ms on commodity hardware. No persistence layer in v1; the graph is rebuilt per invocation, with a content-hash file cache for parsed trees (`.lore-cache/`, safe to delete).
+The graph is held in memory: `HashMap<QName, Node>` plus forward and reverse adjacency `HashMap<QName, Vec<Edge>>` (both directions stored -- queries read both). Single-hop queries are O(degree); transitive queries are BFS, O(V+E). Target: any query over a 5,000-node graph answers in <50 ms on commodity hardware. No persistence layer in v1; the graph is rebuilt per invocation, with a content-hash file cache of per-file extraction facts (`.lore-cache/`, safe to delete; facts, not serialized trees -- D-064).
 
 ---
 
@@ -468,7 +476,7 @@ Single binary `lore` (crate `lore_cli`).
 | `lore scan [--json]` | Scanner+binder only: list every annotation block, its subject, qname, kind | T1 |
 | `lore ask "<query>" [--json] [--all --max-len N]` | §10 | T4 |
 | `lore lint [--json] [--no-stale]` | Resolution checks, required intent, applicability, depends_on surface, hygiene (`W0210`-`W0212`), reconciliation, staleness; exit per §10.5 | T3 (structural) → T7 (full) |
-| `lore stats [--json]` | Coverage: nodes by kind/origin, % declared intent per kind, claims by status, unresolved_calls count | T7 |
+| `lore stats [--json]` | Coverage: nodes by kind/origin, % declared intent per kind, claims by status (T7), unresolved_calls + ambiguous_derived_names counts (D-065) | T6 (counts) → T7 (claim statuses) |
 | `lore history <qname> [--json]` | §9.3 (D-059) | T5 |
 | `lore graph --dot [--focus <qname> --depth N]` | Graphviz export (D-038) | T8 |
 | `lore mcp` | MCP server (stdio): tools `lore_ask`, `lore_show`, `lore_lint`, `lore_history` mapping 1:1 to the JSON outputs (D-037) | T9 |
@@ -543,6 +551,14 @@ pub struct Graph {
 // the graph consumes it as data, never reading the filesystem itself.
 pub struct Codeowners { pub file: PathBuf, pub rules: Vec<CodeownersRule> }
 pub struct CodeownersRule { pub pattern: String, pub owners: Vec<String> }
+
+// The derived layer as data, passed into lore_graph::build by the CLI from
+// lore_derive's output (the graph never depends on the derive crate, §13).
+pub struct DerivedLayer {
+    pub nodes: Vec<IntentNode>,          // origin Derived, empty intent (§8.1)
+    pub edges: Vec<Edge>,                // layer Derived: Calls/Affects/Reads with confidence
+    pub scope: HashSet<PathBuf>,         // derivation scope (D-061): §9.1's in-scope test
+}
 ```
 
 Dependency direction (no crate reaches backwards):
