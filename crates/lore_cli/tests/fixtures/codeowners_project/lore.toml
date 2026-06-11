@@ -1,0 +1,6 @@
+[project]
+name = "codeowners_project"
+languages = ["python"]
+
+[modules]
+"src/**" = "Payment"
