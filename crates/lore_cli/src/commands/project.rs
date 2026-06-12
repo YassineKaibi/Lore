@@ -74,15 +74,28 @@ pub fn load(manifest_path: &Path) -> Result<Project, i32> {
     })
 }
 
-/// Scan + parse + graph-build, shared by lint and ask: blocks become
-/// declared IntentNodes (D-046a), `[modules]` names become ambient Module
-/// nodes (D-046). Returns the graph plus the scanner/parser findings that
-/// precede it (lint reports them; ask does not — D-053b).
-pub fn build_graph(p: &Project, manifest_path: &Path) -> (lore_graph::Graph, Vec<Finding>) {
+/// Everything the commands need from one pipeline run: the graph, the
+/// scanner/parser findings that precede it (lint reports them; ask does not
+/// — D-053b), and the derivation drop counters for `lore stats` (D-065).
+pub struct Built {
+    pub graph: lore_graph::Graph,
+    pub findings: Vec<Finding>,
+    pub unresolved_calls: usize,
+    pub ambiguous_derived_names: usize,
+}
+
+/// Scan + parse + derive + graph-build, shared by lint, ask, and stats:
+/// blocks become declared IntentNodes (D-046a), `[modules]` names become
+/// ambient Module nodes (D-046), and the derived layer comes from
+/// lore_derive over the D-061 scope.
+pub fn build_graph(p: &Project, manifest_path: &Path) -> Built {
     let config = ScanConfig {
         modules: p.manifest.modules.clone(),
     };
     let result = lore_annotations::scan(&config, &p.sources);
+
+    let (derived, unresolved_calls, ambiguous_derived_names) =
+        derive_layer(p, manifest_path, &result);
 
     let mut findings = result.findings;
     let mut nodes = Vec::new();
@@ -130,16 +143,106 @@ pub fn build_graph(p: &Project, manifest_path: &Path) -> (lore_graph::Graph, Vec
     }
 
     let codeowners = discover_codeowners(manifest_path.parent().unwrap_or(Path::new(".")));
-    (
-        lore_graph::build(
-            nodes,
-            &manifest_modules,
-            codeowners.as_ref(),
-            // derivation wiring lands with the lore_derive call (T6)
-            lore_graph::DerivedLayer::empty(),
-        ),
+    Built {
+        graph: lore_graph::build(nodes, &manifest_modules, codeowners.as_ref(), derived),
         findings,
-    )
+        unresolved_calls,
+        ambiguous_derived_names,
+    }
+}
+
+/// Languages with a §8 derived layer at T6: Python and TypeScript (D-014).
+/// Go, Java, Rust derive at T8 — until then their files stay outside the
+/// derivation scope and claims about them are honestly Unverifiable.
+fn derived_lang(lang: Lang) -> bool {
+    matches!(lang, Lang::Python | Lang::TypeScript | Lang::Tsx)
+}
+
+/// Run lore_derive over the derivation scope (D-061: files of supported
+/// languages that §7.5 assigns a module) and map its output onto graph
+/// types. Returns the layer plus the D-065 stats counters.
+fn derive_layer(
+    p: &Project,
+    manifest_path: &Path,
+    scan: &lore_annotations::ScanResult,
+) -> (lore_graph::DerivedLayer, usize, usize) {
+    let modules: std::collections::HashMap<&Path, &str> = scan
+        .file_modules
+        .iter()
+        .filter_map(|fm| Some((fm.path.as_path(), fm.module.as_deref()?)))
+        .collect();
+    let units: Vec<lore_derive::SourceUnit> = p
+        .sources
+        .iter()
+        .filter(|s| Lang::from_path(&s.path).is_some_and(derived_lang))
+        .filter_map(|s| {
+            Some(lore_derive::SourceUnit {
+                path: s.path.clone(),
+                text: s.text.clone(),
+                module: (*modules.get(s.path.as_path())?).to_string(),
+            })
+        })
+        .collect();
+
+    // §8.3 targets: every annotated State with an extractable host
+    // identifier and a module. The derive crate matches occurrences against
+    // these; the qname is what the touch edges point at.
+    let states: Vec<lore_derive::StateSymbol> = scan
+        .blocks
+        .iter()
+        .filter(|b| b.kind == lore_intent::Kind::State)
+        .filter_map(|b| {
+            Some(lore_derive::StateSymbol {
+                qname: b.qname.clone(),
+                identifier: b.subject.clone()?,
+                file: b.file.clone(),
+                module: b.module.clone()?,
+            })
+        })
+        .collect();
+
+    let config = lore_derive::DeriveConfig {
+        roots: p.manifest.roots.clone(),
+        cache_dir: Some(
+            manifest_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(".lore-cache"),
+        ),
+    };
+    let result = lore_derive::derive(&config, &units, &states);
+
+    let edges = result.edges.into_iter().map(graph_edge).collect();
+    let layer = lore_graph::DerivedLayer {
+        nodes: result.nodes,
+        edges,
+        scope: result.scope.into_iter().collect(),
+    };
+    (layer, result.unresolved_calls, result.ambiguous_names)
+}
+
+/// lore_derive cannot name lore_graph types (§13 dependency direction), so
+/// the CLI is where its edges become graph edges.
+fn graph_edge(e: lore_derive::DerivedEdge) -> lore_graph::Edge {
+    use lore_derive::{DerivedConfidence, DerivedEdgeKind};
+    use lore_graph::{Confidence, Edge, EdgeKind, Layer};
+    Edge {
+        from: e.from,
+        to: e.to,
+        kind: match e.kind {
+            DerivedEdgeKind::Calls => EdgeKind::Calls,
+            DerivedEdgeKind::Affects => EdgeKind::Affects,
+            DerivedEdgeKind::Reads => EdgeKind::Reads,
+        },
+        layer: Layer::Derived,
+        loc: e.loc,
+        status: None,
+        confidence: Some(match e.confidence {
+            DerivedConfidence::Exact => Confidence::Exact,
+            DerivedConfidence::Resolved => Confidence::Resolved,
+            DerivedConfidence::Heuristic => Confidence::Heuristic,
+        }),
+    }
 }
 
 /// D-058a: first existing of .github/CODEOWNERS, CODEOWNERS,

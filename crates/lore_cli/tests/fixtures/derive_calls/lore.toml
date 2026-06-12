@@ -1,0 +1,8 @@
+[project]
+name = "derive_calls"
+languages = ["python"]
+roots = ["src"]
+
+[modules]
+"src/pay/**" = "Payment"
+"src/user/**" = "User"

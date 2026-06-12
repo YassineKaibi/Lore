@@ -23,7 +23,9 @@ pub fn run(manifest_path: &Path, json: bool, no_stale: bool, quiet: bool, no_col
         Err(code) => return code,
     };
 
-    let (graph, mut findings) = project::build_graph(&p, manifest_path);
+    let built = project::build_graph(&p, manifest_path);
+    let graph = built.graph;
+    let mut findings = built.findings;
     findings.extend(graph.findings.iter().cloned());
 
     // D-057: [policy] unknown = "error" promotes W0213 (code unchanged,
