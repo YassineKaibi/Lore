@@ -22,12 +22,13 @@ pub struct Commit {
 // name: history
 // purpose: "Render the git change history of one node's subject span: the why behind the code, recovered from commit messages"
 // because: "Hand-maintained version/changed clauses drift; git already records change intent, so lore renders it instead (D-004)"
+// because: "history builds the graph without staleness metadata: it reads git itself for the one span it renders (D-068c)"
 pub fn run(manifest_path: &Path, qname: &str, json: bool, quiet: bool) -> i32 {
     let p = match project::load(manifest_path) {
         Ok(p) => p,
         Err(code) => return code,
     };
-    let graph = project::build_graph(&p, manifest_path).graph;
+    let graph = project::build_graph(&p, manifest_path, false, quiet).graph;
 
     // D-059a: the argument must name a node; mirror ask's D-053a failure.
     let node = match lore_graph::exec::lookup(&graph, &QName::from_dotted(qname)) {

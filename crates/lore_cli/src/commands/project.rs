@@ -86,9 +86,11 @@ pub struct Built {
 
 /// Scan + parse + derive + graph-build, shared by lint, ask, and stats:
 /// blocks become declared IntentNodes (D-046a), `[modules]` names become
-/// ambient Module nodes (D-046), and the derived layer comes from
-/// lore_derive over the D-061 scope.
-pub fn build_graph(p: &Project, manifest_path: &Path) -> Built {
+/// ambient Module nodes (D-046), the derived layer comes from lore_derive
+/// over the D-061 scope, and reconciliation gets its inputs as data
+/// (D-066). Only lint pays the git cost: `check_stale` gathers the §9.2
+/// blame metadata (D-068c) and is false for every other command.
+pub fn build_graph(p: &Project, manifest_path: &Path, check_stale: bool, quiet: bool) -> Built {
     let config = ScanConfig {
         modules: p.manifest.modules.clone(),
     };
@@ -96,6 +98,32 @@ pub fn build_graph(p: &Project, manifest_path: &Path) -> Built {
 
     let (derived, unresolved_calls, ambiguous_derived_names) =
         derive_layer(p, manifest_path, &result);
+
+    // D-066b/c: the occurrence test's inputs. The first block wins a
+    // duplicate qname, matching the node table's first-declaration rule.
+    let mut host_identifiers: std::collections::HashMap<lore_intent::QName, String> =
+        std::collections::HashMap::new();
+    for block in &result.blocks {
+        if let Some(subject) = &block.subject {
+            host_identifiers
+                .entry(block.qname.clone())
+                .or_insert_with(|| subject.clone());
+        }
+    }
+    let root = manifest_path.parent().unwrap_or(Path::new("."));
+    let reconcile = lore_graph::ReconcileInput {
+        sources: p
+            .sources
+            .iter()
+            .map(|s| (s.path.clone(), s.text.clone()))
+            .collect(),
+        host_identifiers,
+        staleness: if check_stale {
+            super::stale::gather(root, &result.blocks, quiet)
+        } else {
+            None
+        },
+    };
 
     let mut findings = result.findings;
     let mut nodes = Vec::new();
@@ -144,14 +172,12 @@ pub fn build_graph(p: &Project, manifest_path: &Path) -> Built {
 
     let codeowners = discover_codeowners(manifest_path.parent().unwrap_or(Path::new(".")));
     Built {
-        // Reconciliation inputs arrive with the CLI wiring commit; until
-        // then §9.1 runs with its inputs withheld (D-066c) — no Contradicted.
         graph: lore_graph::build(
             nodes,
             &manifest_modules,
             codeowners.as_ref(),
             derived,
-            lore_graph::ReconcileInput::empty(),
+            reconcile,
         ),
         findings,
         unresolved_calls,

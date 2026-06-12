@@ -60,7 +60,7 @@ fn generate(root: &Path) {
 fn lint(root: &Path) -> Duration {
     let started = Instant::now();
     let out = Command::new(env!("CARGO_BIN_EXE_lore"))
-        .args(["lint", "--no-color", "--quiet"])
+        .args(["lint", "--no-stale", "--no-color", "--quiet"])
         .current_dir(root)
         .output()
         .unwrap();

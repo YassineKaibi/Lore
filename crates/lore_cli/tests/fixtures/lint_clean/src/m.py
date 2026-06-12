@@ -7,4 +7,4 @@ count = 0
 # purpose: "Bump the counter"
 # affects: App.count
 def bump():
-    pass
+    count += 1

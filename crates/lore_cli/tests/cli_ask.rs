@@ -67,15 +67,16 @@ fn affects_star_renders_the_event_hop_chain_with_per_hop_labels() {
         &fixture("ask_project"),
     );
     assert_eq!(out.status.code(), Some(0));
-    // T6: the fixture's files are in derivation scope, and the affects
-    // claims have no matching derived edge (pass bodies) — Unverified, the
-    // honest withheld verdict (D-063); emits stays Unverifiable (Phase 1).
+    // T7: the fixture's pass-bodies never mention the states they claim to
+    // touch, so §9.1's occurrence test proves the claims Contradicted
+    // (D-066) — and the label rides every hop; emits stays Unverifiable
+    // (Phase 1).
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         "affects*(Payment.ledger): 2 results\n\
-         Payment.audit   Function  src/pay/svc.py:28  [via: Affects]  [Declared/Unverified]\n\
+         Payment.audit   Function  src/pay/svc.py:28  [via: Affects]  [Declared/Contradicted]\n\
          Payment.charge  Function  src/pay/svc.py:22  [via: Emits -> Handles -> Affects]  \
-         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Unverified]\n"
+         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Contradicted]\n"
     );
 }
 
@@ -90,7 +91,7 @@ fn path_renders_the_shortest_witnessed_chain() {
         String::from_utf8_lossy(&out.stdout),
         "path(Payment.charge, Payment.ledger): 1 result\n\
          Payment.ledger  State  src/pay/svc.py:4  [via: Emits -> Handles -> Affects]  \
-         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Unverified]\n"
+         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Contradicted]\n"
     );
 }
 
@@ -123,11 +124,14 @@ fn show_renders_the_full_node_card() {
          \x20 reads: Payment.balances\n\
          \x20 emits: Payment.Settled\n\
          edges out:\n\
-         \x20 Reads -> Payment.balances  [Declared/Unverified]\n\
+         \x20 Reads -> Payment.balances  [Declared/Contradicted]\n\
          \x20 Emits -> Payment.Settled  [Declared/Unverifiable]\n\
          edges in:\n\
          \x20 Contains <- Payment  [Derived/Exact]\n\
          findings:\n\
+         \x20 W0302 src/pay/svc.py:19  contradicted claim: \"reads: Payment.balances\" on \
+         \"Payment.charge\", whose subject span never mentions \"balances\"; the code no \
+         longer does what the claim says — update or remove the clause\n\
          \x20 W0213 src/pay/svc.py:21  function \"Payment.charge\" declares an unknown: \
          \"Concurrent charge + refund untested\"; resolve it and remove the clause once it is answered\n"
     );
@@ -175,7 +179,7 @@ fn ask_json_matches_the_schema_exactly() {
                     "location": {"file": "src/pay/svc.py", "line": 28},
                     "via": [
                         {"from": "Payment.audit", "to": "Payment.ledger",
-                         "edge": "Affects", "layer": "Declared", "status": "Unverified"}
+                         "edge": "Affects", "layer": "Declared", "status": "Contradicted"}
                     ]
                 }
             ],
@@ -212,7 +216,11 @@ fn show_json_returns_the_node_card_with_edge_arrays() {
         .map(|e| e["edge"].as_str().unwrap())
         .collect();
     assert_eq!(out_kinds, ["Affects", "Handles"]);
-    assert_eq!(v["findings"], serde_json::json!([]));
+    // ask/show render the graph's findings unfiltered (D-056c): the
+    // pass-body's contradicted affects claim shows up on the card.
+    assert_eq!(v["findings"].as_array().unwrap().len(), 1);
+    assert_eq!(v["findings"][0]["code"], "W0302");
+    assert_eq!(v["findings"][0]["severity"], "warning");
 }
 
 #[test]
@@ -240,7 +248,7 @@ fn ask_answers_on_a_project_with_findings_and_reports_unresolved_refs() {
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         "reads(Payment.balances): 1 result\n\
-         Payment.charge  Function  src/pay/svc.py:16  [via: Reads]  [Declared/Unverified]\n\
+         Payment.charge  Function  src/pay/svc.py:16  [via: Reads]  [Declared/Contradicted]\n\
          note: 1 unresolved ref in the graph (run lore lint): Payment.ledgr\n"
     );
 

@@ -81,7 +81,8 @@ pub struct ScanResult {
 /// blocks by (file, start line), findings by (file, line, code).
 
 // @lore
-// purpose: "Scan, bind, and scope a set of source files into qnamed annotation blocks plus findings"
+// purpose: "Scan, bind, and scope a set of source files into qnamed annotation blocks, per-file module assignments, and findings"
+// because: "The per-file module assignment is exposed so the CLI can build the derivation scope without re-implementing the scoping rules (D-061)"
 // unknown: "[modules] globs that fail to compile are dropped silently when matching; the manifest layer validates value types but not glob syntax"
 pub fn scan(config: &ScanConfig, files: &[SourceFile]) -> ScanResult {
     let globs = scoping::CompiledGlobs::compile(&config.modules);

@@ -56,7 +56,10 @@ fn show_renders_a_derived_only_node_card() {
 fn an_unannotated_repo_lints_clean() {
     // derived-only nodes are exempt from requirement checks (D-046):
     // cold start must not punish the absence of annotations
-    let out = lore(&["lint", "--no-color"], &fixture("derive_calls"));
+    let out = lore(
+        &["lint", "--no-stale", "--no-color"],
+        &fixture("derive_calls"),
+    );
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
@@ -97,6 +100,7 @@ fn stats_reports_kind_origin_counts_and_the_drop_counters() {
          \x20 module    2  (2/0/0, 0 with intent)\n\
          \x20 state     1  (1/0/0, 1 with intent)\n\
          \x20 function  3  (0/2/1, 1 with intent)\n\
+         claims by status: 1 (1 verified, 0 unverified, 0 contradicted, 0 unverifiable)\n\
          unresolved_calls: 1\n\
          ambiguous_derived_names: 0\n"
     );
@@ -120,6 +124,8 @@ fn stats_json_field_names_are_pinned() {
                 },
             },
             "edges": {"total": 8, "declared": 1, "derived": 7},
+            // D-069: the claims-by-status breakdown joins at T7
+            "claims": {"total": 1, "verified": 1, "unverified": 0, "contradicted": 0, "unverifiable": 0},
             "unresolved_calls": 1,
             "ambiguous_derived_names": 0,
         })

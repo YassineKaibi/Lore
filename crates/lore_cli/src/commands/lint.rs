@@ -1,8 +1,9 @@
-//! `lore lint` (§12), structural subset at T3, hardened for CI at T5:
-//! scanner/binder findings, clause parsing, then the lore_graph checks —
-//! resolution, applicability, depends_on surface, hygiene, CODEOWNERS,
+//! `lore lint` (§12), structural subset at T3, hardened for CI at T5, full
+//! at T7: scanner/binder findings, clause parsing, then the lore_graph
+//! checks — resolution with four-status reconciliation, applicability,
+//! depends_on surface, hygiene, CODEOWNERS, undeclared effects, staleness,
 //! strict promotion — then `[policy]` promotion and `[lint]` overrides
-//! (D-056, D-057). Reconciliation and staleness arrive at T7.
+//! (D-056, D-057, D-067, D-068).
 
 use std::path::Path;
 
@@ -14,25 +15,32 @@ use lore_cli::manifest::{LintLevel, PolicyLevel, UndeclaredEffects};
 
 // @lore
 // name: lint
-// purpose: "Project-wide structural lint: every scanner, parser, and graph finding with §10.5 exit codes"
+// purpose: "Project-wide lint: every scanner, parser, graph, and reconciliation finding with §10.5 exit codes"
+// because: "Lint is where drift becomes a CI finding instead of a silent decay: contradicted claims and stale blocks fail loudly here (D-019)"
 // triggers: Annotations.scan, Intent.parse_intent, Graph.build
 pub fn run(manifest_path: &Path, json: bool, no_stale: bool, quiet: bool, no_color: bool) -> i32 {
-    let _ = no_stale; // staleness checks land at T7 (§9.2); the flag is accepted now per §12
     let p = match project::load(manifest_path) {
         Ok(p) => p,
         Err(code) => return code,
     };
 
-    let built = project::build_graph(&p, manifest_path);
+    // D-068c: lint is the one command that gathers blame metadata.
+    let built = project::build_graph(&p, manifest_path, !no_stale, quiet);
     let graph = built.graph;
     let mut findings = built.findings;
     findings.extend(graph.findings.iter().cloned());
 
     // D-057: [policy] unknown = "error" promotes W0213 (code unchanged,
     // mirroring D-049). Applied here — the policy lives in the manifest,
-    // so the graph carries the base Warning.
+    // so the graph carries the base Warning. D-068e: [policy] stale does
+    // the same for W0301.
     if matches!(p.manifest.policy.unknown, PolicyLevel::Error) {
         for f in findings.iter_mut().filter(|f| f.code == "W0213") {
+            f.severity = Severity::Error;
+        }
+    }
+    if matches!(p.manifest.policy.stale, PolicyLevel::Error) {
+        for f in findings.iter_mut().filter(|f| f.code == "W0301") {
             f.severity = Severity::Error;
         }
     }

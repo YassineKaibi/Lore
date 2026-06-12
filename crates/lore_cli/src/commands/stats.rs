@@ -1,10 +1,10 @@
-//! `lore stats` (§12, D-065): coverage counts at T6 — nodes by kind and
-//! origin, declared-intent coverage per kind, edges by layer, and the
-//! derivation drop counters. The claims-by-status breakdown joins at T7.
+//! `lore stats` (§12, D-065): coverage counts — nodes by kind and origin,
+//! declared-intent coverage per kind, edges by layer, the claims-by-status
+//! breakdown (D-069), and the derivation drop counters.
 
 use std::path::Path;
 
-use lore_graph::Layer;
+use lore_graph::{ClaimStatus, Layer};
 use lore_intent::{Intent, Kind, Origin};
 
 use crate::commands::project;
@@ -39,7 +39,7 @@ impl KindRow {
 
 // @lore
 // name: stats
-// purpose: "Coverage counts over the graph: nodes by kind and origin, declared-intent share per kind, edges by layer, derivation drop counters"
+// purpose: "Coverage counts over the graph: nodes by kind and origin, declared-intent share per kind, edges by layer, claims by status, derivation drop counters"
 // because: "The drop counters are the honesty surface for the derived layer: every guess lore refused to make is visible here, not silently absent (G-7)"
 // triggers: Graph.build
 pub fn run(manifest_path: &Path, json: bool, quiet: bool) -> i32 {
@@ -47,7 +47,7 @@ pub fn run(manifest_path: &Path, json: bool, quiet: bool) -> i32 {
         Ok(p) => p,
         Err(code) => return code,
     };
-    let built = project::build_graph(&p, manifest_path);
+    let built = project::build_graph(&p, manifest_path, false, quiet);
     let graph = &built.graph;
 
     let mut rows: Vec<(Kind, KindRow)> = KINDS.iter().map(|k| (*k, KindRow::default())).collect();
@@ -74,6 +74,20 @@ pub fn run(manifest_path: &Path, json: bool, quiet: bool) -> i32 {
         .count();
     let derived_edges = graph.edge_count() - declared_edges;
 
+    // D-069: every declared edge carrying a ClaimStatus, by §6.2 order.
+    let mut claims = [0usize; 4];
+    for e in graph.out.values().flatten() {
+        if let Some(status) = e.status {
+            claims[match status {
+                ClaimStatus::Verified => 0,
+                ClaimStatus::Unverified => 1,
+                ClaimStatus::Contradicted => 2,
+                ClaimStatus::Unverifiable => 3,
+            }] += 1;
+        }
+    }
+    let claims_total: usize = claims.iter().sum();
+
     if json {
         let by_kind: serde_json::Map<String, serde_json::Value> = rows
             .iter()
@@ -97,6 +111,13 @@ pub fn run(manifest_path: &Path, json: bool, quiet: bool) -> i32 {
                 "lore_version": env!("CARGO_PKG_VERSION"),
                 "nodes": {"total": graph.nodes.len(), "by_kind": by_kind},
                 "edges": {"total": graph.edge_count(), "declared": declared_edges, "derived": derived_edges},
+                "claims": {
+                    "total": claims_total,
+                    "verified": claims[0],
+                    "unverified": claims[1],
+                    "contradicted": claims[2],
+                    "unverifiable": claims[3],
+                },
                 "unresolved_calls": built.unresolved_calls,
                 "ambiguous_derived_names": built.ambiguous_derived_names,
             }))
@@ -131,6 +152,10 @@ pub fn run(manifest_path: &Path, json: bool, quiet: bool) -> i32 {
             row.with_intent,
         ));
     }
+    out.push_str(&format!(
+        "claims by status: {claims_total} ({} verified, {} unverified, {} contradicted, {} unverifiable)\n",
+        claims[0], claims[1], claims[2], claims[3],
+    ));
     out.push_str(&format!("unresolved_calls: {}\n", built.unresolved_calls));
     out.push_str(&format!(
         "ambiguous_derived_names: {}\n",

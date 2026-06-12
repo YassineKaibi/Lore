@@ -15,7 +15,7 @@ fn fixture(name: &str) -> std::path::PathBuf {
 
 #[test]
 fn lint_json_emits_exact_findings_and_exit_1() {
-    let out = lore(&["lint", "--json"], &fixture("lint_project"));
+    let out = lore(&["lint", "--no-stale", "--json"], &fixture("lint_project"));
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let findings: Vec<(&str, &str, u64)> = v["findings"]
         .as_array()
@@ -30,14 +30,18 @@ fn lint_json_emits_exact_findings_and_exit_1() {
         })
         .collect();
     // sorted by (file, line, code): W0210 ledger (orphaned by the typo'd
-    // affects), W0209 balances, E0306 the typo, E0304 the undeclared dep.
+    // affects), W0209 balances, E0306 the typo, then T7's reconciliation —
+    // the pass-body never mentions "balances" or "notify", so both claims
+    // are Contradicted (W0302, D-066) — and the E0304 undeclared dep.
     assert_eq!(
         findings,
         [
             ("W0210", "src/pay/svc.py", 4),
             ("W0209", "src/pay/svc.py", 9),
             ("E0306", "src/pay/svc.py", 13),
+            ("W0302", "src/pay/svc.py", 14),
             ("E0304", "src/pay/svc.py", 15),
+            ("W0302", "src/pay/svc.py", 15),
         ]
     );
     let e0306 = &v["findings"][2]["message"];
@@ -46,30 +50,47 @@ fn lint_json_emits_exact_findings_and_exit_1() {
         "unresolved ref \"Payment.ledgr\" in \"affects\" on \"Payment.charge\"; nearest existing qname is \"Payment.ledger\""
     );
     assert_eq!(
+        v["findings"][3]["message"],
+        "contradicted claim: \"reads: Payment.balances\" on \"Payment.charge\", whose subject span never mentions \"balances\"; the code no longer does what the claim says — update or remove the clause"
+    );
+    assert_eq!(
         v["summary"],
-        serde_json::json!({"errors": 2, "warnings": 2})
+        serde_json::json!({"errors": 2, "warnings": 4})
     );
     assert_eq!(out.status.code(), Some(1));
 }
 
 #[test]
 fn lint_clean_project_is_exit_0_with_header() {
-    let out = lore(&["lint", "--no-color"], &fixture("lint_clean"));
+    let out = lore(
+        &["lint", "--no-stale", "--no-color"],
+        &fixture("lint_clean"),
+    );
     assert_eq!(out.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // App (ambient), App.count, App.bump; Contains x2 + Affects
+    // App (ambient), App.count, App.bump; Contains x2 + the affects claim
+    // (Verified — bump really does write count) + its derived counterpart
     assert_eq!(
         stdout,
-        "lint: 3 nodes, 3 edges, 0 findings (0 errors, 0 warnings)\n"
+        "lint: 3 nodes, 4 edges, 0 findings (0 errors, 0 warnings)\n"
     );
 }
 
 #[test]
 fn lint_human_output_is_deterministic_and_quiet_drops_the_header() {
-    let a = lore(&["lint", "--no-color"], &fixture("lint_project"));
-    let b = lore(&["lint", "--no-color"], &fixture("lint_project"));
+    let a = lore(
+        &["lint", "--no-stale", "--no-color"],
+        &fixture("lint_project"),
+    );
+    let b = lore(
+        &["lint", "--no-stale", "--no-color"],
+        &fixture("lint_project"),
+    );
     assert_eq!(a.stdout, b.stdout);
-    let quiet = lore(&["lint", "--no-color", "--quiet"], &fixture("lint_project"));
+    let quiet = lore(
+        &["lint", "--no-stale", "--no-color", "--quiet"],
+        &fixture("lint_project"),
+    );
     let stdout = String::from_utf8_lossy(&quiet.stdout);
     assert!(stdout.starts_with("W0210 "));
     assert!(!stdout.contains("lint:"));
@@ -87,7 +108,10 @@ fn lint_without_manifest_is_e0402_exit_2() {
 
 #[test]
 fn policy_unknown_error_promotes_w0213_and_fails_lint() {
-    let out = lore(&["lint", "--json"], &fixture("policy_unknown"));
+    let out = lore(
+        &["lint", "--no-stale", "--json"],
+        &fixture("policy_unknown"),
+    );
     assert_eq!(out.status.code(), Some(1));
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let findings = v["findings"].as_array().unwrap();
@@ -110,7 +134,7 @@ fn policy_unknown_error_promotes_w0213_and_fails_lint() {
 #[test]
 fn lint_off_overrides_suppress_findings_and_the_exit_surface() {
     // the fixture state would carry W0209 + W0210; both are off (D-056b)
-    let out = lore(&["lint", "--no-color"], &fixture("lint_off"));
+    let out = lore(&["lint", "--no-stale", "--no-color"], &fixture("lint_off"));
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
@@ -120,7 +144,10 @@ fn lint_off_overrides_suppress_findings_and_the_exit_surface() {
 
 #[test]
 fn codeowners_disagreement_is_w0207() {
-    let out = lore(&["lint", "--json"], &fixture("codeowners_project"));
+    let out = lore(
+        &["lint", "--no-stale", "--json"],
+        &fixture("codeowners_project"),
+    );
     assert_eq!(out.status.code(), Some(0)); // a warning, not an error
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let findings = v["findings"].as_array().unwrap();
@@ -137,7 +164,7 @@ fn ci_sample_project_fails_on_its_seeded_e0201() {
     // pins the T5 exit criterion locally: examples/ci-sample is the project
     // the lint-example workflow gates on, and its seeded finding must stay
     let sample = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/ci-sample");
-    let out = lore(&["lint", "--no-color"], &sample);
+    let out = lore(&["lint", "--no-stale", "--no-color"], &sample);
     assert_eq!(out.status.code(), Some(1));
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
