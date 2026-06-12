@@ -18,7 +18,8 @@ mod util;
 pub use codeowners::{Codeowners, CodeownersRule};
 pub use engine::{Direction, Hop, Mode, Traversal, Witness};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use lore_intent::{Finding, IntentNode, Kind, QName, Span, Spanned};
 
@@ -139,6 +140,31 @@ pub struct Graph {
     pub attributions: HashMap<QName, Vec<usize>>,
 }
 
+/// The derived layer as data (§13): lore_derive's output mapped onto graph
+/// types by the CLI — the graph never depends on the derive crate.
+
+// @lore
+// kind: type
+// purpose: "The derived layer as build input: extracted nodes, confidence-labeled edges, and the derivation scope that decides Unverifiable"
+#[derive(Default)]
+pub struct DerivedLayer {
+    /// Origin Derived, empty intent (§8.1).
+    pub nodes: Vec<IntentNode>,
+    /// Layer Derived: Calls/Affects/Reads, each with a confidence (§8.4).
+    pub edges: Vec<Edge>,
+    /// The §9.1 in-scope test (D-061): claims on targets outside these
+    /// files are Unverifiable.
+    pub scope: HashSet<PathBuf>,
+}
+
+impl DerivedLayer {
+    /// No derivation: scope is empty, so §9.1 labels every claim
+    /// Unverifiable — the algorithm, not a special case (D-047e, D-063).
+    pub fn empty() -> DerivedLayer {
+        DerivedLayer::default()
+    }
+}
+
 impl Graph {
     pub fn edge_count(&self) -> usize {
         self.out.values().map(Vec::len).sum()
@@ -161,13 +187,15 @@ impl OwnedFinding {
     }
 }
 
-/// Node table plus the deterministic iteration order and the set of nodes
-/// that were declared by an intent block (requirement checks apply only to
-/// those, D-046).
+/// Node table plus the deterministic iteration order, the set of nodes that
+/// were declared by an intent block (requirement checks apply only to those,
+/// D-046), and the derived qnames rejected by the E0305 collision rule
+/// (their derived edges are dropped with them, D-060c).
 pub(crate) struct Ctx {
     pub nodes: HashMap<QName, IntentNode>,
     pub order: Vec<QName>,
-    pub annotated: std::collections::HashSet<QName>,
+    pub annotated: HashSet<QName>,
+    pub rejected_derived: HashSet<QName>,
 }
 
 impl Ctx {
@@ -220,26 +248,39 @@ pub(crate) fn is_prefix_of(p: &QName, q: &QName) -> bool {
     p.0.len() <= q.0.len() && q.0[..p.0.len()] == p.0[..]
 }
 
-/// Build the graph from the declared layer: node table (E0305), ambient
-/// manifest modules (D-046), applicability matrix (§3.2), resolution (§6.3),
+/// Build the graph from both layers: node table with declared/derived
+/// merging (E0305, D-060), ambient manifest modules (D-046), applicability
+/// matrix (§3.2), resolution with interim claim statuses (§6.3, D-063),
 /// structural edges (D-047), depends_on surface (D-048), hygiene
 /// (W0210–W0212), and strict promotion (D-049). Findings come out sorted by
 /// (file, line, col, code, message) — deterministic, always.
 
 // @lore
-// purpose: "Build the intent graph from the declared layer: node table, structural edges, resolution, and the structural lint findings"
-// because: "Claim statuses are all Unverifiable until lore_derive lands at T6: the derivation scope is empty, which is the §9.1 algorithm applied, not a shortcut (D-047)"
+// purpose: "Build the intent graph from both layers: node table with merging, structural and derived edges, resolution with claim statuses, and the lint findings"
+// because: "Claim statuses run §9.1 without its Contradicted branch until T7 lands reconciliation: a withheld verdict is honest, a false alarm is not (D-063)"
 pub fn build(
     declared: Vec<IntentNode>,
     manifest_modules: &[Spanned<String>],
     codeowners: Option<&Codeowners>,
+    derived: DerivedLayer,
 ) -> Graph {
     let mut findings: Vec<OwnedFinding> = Vec::new();
-    let ctx = table::build(declared, manifest_modules, &mut findings);
+    let ctx = table::build(declared, manifest_modules, derived.nodes, &mut findings);
+
+    // A rejected derived node takes every derived edge touching its qname
+    // with it: the qname now names a different declaration (D-060c).
+    let derived_edges: Vec<Edge> = derived
+        .edges
+        .into_iter()
+        .filter(|e| {
+            !ctx.rejected_derived.contains(&e.from) && !ctx.rejected_derived.contains(&e.to)
+        })
+        .collect();
 
     matrix::check(&ctx, &mut findings);
-    let mut edges = resolve::resolve(&ctx, &mut findings);
+    let mut edges = resolve::resolve(&ctx, &derived_edges, &derived.scope, &mut findings);
     edges.extend(structure::derive(&ctx));
+    edges.extend(derived_edges);
     surface::check(&ctx, &edges, &mut findings);
     hygiene::check(&ctx, &edges, &mut findings);
     if let Some(co) = codeowners {

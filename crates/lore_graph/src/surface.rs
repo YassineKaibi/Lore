@@ -4,24 +4,28 @@
 
 use lore_intent::{Finding, QName};
 
-use crate::{Ctx, Edge, EdgeKind, OwnedFinding, is_prefix_of};
+use crate::{Ctx, Edge, EdgeKind, Layer, OwnedFinding, is_prefix_of};
 
-/// The claim-edge kinds whose refs count as "use" of a dependency.
-fn is_use(kind: EdgeKind) -> bool {
-    matches!(
-        kind,
-        EdgeKind::Affects
-            | EdgeKind::Reads
-            | EdgeKind::Triggers
-            | EdgeKind::Emits
-            | EdgeKind::Handles
-    )
+/// The edges whose refs count as "use" of a dependency: declared clause
+/// refs only (D-048c/d) — a derived Affects/Reads/Calls is a fact about the
+/// code, not a declared assertion, so it neither fires E0304 nor satisfies
+/// a depends_on entry.
+fn is_use(e: &Edge) -> bool {
+    e.layer == Layer::Declared
+        && matches!(
+            e.kind,
+            EdgeKind::Affects
+                | EdgeKind::Reads
+                | EdgeKind::Triggers
+                | EdgeKind::Emits
+                | EdgeKind::Handles
+        )
 }
 
 pub(crate) fn check(ctx: &Ctx, edges: &[Edge], findings: &mut Vec<OwnedFinding>) {
     // E0304: a non-local clause ref needs the target's owner chain to
     // intersect the source's effective depends_on (D-048c).
-    for edge in edges.iter().filter(|e| is_use(e.kind)) {
+    for edge in edges.iter().filter(|e| is_use(e)) {
         let chain = ctx.owner_chain(&edge.to);
         if chain.is_empty() {
             continue; // orphan target: there is no module to declare
@@ -56,9 +60,7 @@ pub(crate) fn check(ctx: &Ctx, edges: &[Edge], findings: &mut Vec<OwnedFinding>)
                 continue;
             }
             let used = edges.iter().any(|e| {
-                is_use(e.kind)
-                    && is_prefix_of(qname, &e.from)
-                    && ctx.owner_chain(&e.to).contains(&dep_q)
+                is_use(e) && is_prefix_of(qname, &e.from) && ctx.owner_chain(&e.to).contains(&dep_q)
             });
             if !used {
                 findings.push(OwnedFinding::new(

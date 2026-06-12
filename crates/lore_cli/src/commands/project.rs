@@ -131,7 +131,13 @@ pub fn build_graph(p: &Project, manifest_path: &Path) -> (lore_graph::Graph, Vec
 
     let codeowners = discover_codeowners(manifest_path.parent().unwrap_or(Path::new(".")));
     (
-        lore_graph::build(nodes, &manifest_modules, codeowners.as_ref()),
+        lore_graph::build(
+            nodes,
+            &manifest_modules,
+            codeowners.as_ref(),
+            // derivation wiring lands with the lore_derive call (T6)
+            lore_graph::DerivedLayer::empty(),
+        ),
         findings,
     )
 }
