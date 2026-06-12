@@ -63,10 +63,17 @@ Each milestone lists: scope, out of scope, exit criteria (binding -- a milestone
 - Staleness verified against a fixture repo with scripted commit timestamps; clean skip outside git.
 **Spec:** §9.
 
-### T8 -- Remaining Languages and Export
-**Scope:** Go, Java, Rust rows of §7.4 + §8.5 complete (scanner, binder, derivation). `lore graph --dot` with `--focus/--depth`.
-**Exit criteria:** per-language fixture parity with T1/T6 suites; DOT output renders under `dot -Tsvg` without warnings; Lore's own repo (Rust) now reconciles, not just lints structurally.
-**Spec:** §7.4, §8.5, §12.
+### T8 -- Language Packs, Remaining Languages, and Export
+**Scope:** Language-pack loader and generic adapter (§8.6, D-070): pack manifest validation (band `E041x`), tier semantics (scan/bind/derive), builtin packs embedded at build time. Built-in import-strategy library (`relative`, `root_relative`, `package_dir`, `manifest_prefix`) with the named-custom escape hatch (D-071). Conformance harness running every builtin pack's fixture suite through the real scan→bind→derive pipeline in CI. Python and TypeScript migrate onto packs (their existing fixtures become their conformance suites). **Go and Java land as the first pure packs** (zero per-language Rust); **Rust lands as a pack with one custom import strategy** (`rust_use_paths`, D-071c) -- all three completing their §7.4 + §8.5 rows (scanner, binder, derivation). `lore graph --dot` with `--focus/--depth`.
+**Out:** WASM grammars and external (non-embedded) packs -- the pack format reserves their key space (§8.6.1); accepting them is a later milestone via a new D-entry.
+**Exit criteria:**
+- Pack-loader unhappy path first (G-11): each `E041x` class is produced by a malformed fixture pack (unknown key, tier/artifact mismatch, unknown format version, `wasm` grammar, unknown strategy, missing mandatory fixture class) with exact code + message tests.
+- Python/TS pre-T8 test suites pass unchanged after the migration to packs -- zero behavioral drift.
+- Go and Java: per-language fixture parity with the T1/T6 suites, expressed as conformance fixtures including required absences (dropped calls, non-writes -- G-7 negative tests); both packs contain zero per-language Rust.
+- Rust: pack loads with `rust_use_paths`; Lore's own repo (Rust) now reconciles, not just lints structurally.
+- The conformance harness runs every builtin pack's suite in CI; a seeded failing fixture refuses the pack with `E0415`, proven by a harness test.
+- DOT output renders under `dot -Tsvg` without warnings.
+**Spec:** §7.4, §8.5, §8.6, §12.
 
 ### T9 -- MCP Server
 **Scope:** `lore mcp` (stdio): tools `lore_ask`, `lore_show`, `lore_lint`, `lore_history`, returning the §10.4 JSON. Read-only by construction.
