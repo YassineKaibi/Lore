@@ -307,6 +307,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lore_derive"
+version = "0.2.0"
+dependencies = [
+ "lore_intent",
+ "serde",
+ "serde_json",
+ "streaming-iterator",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-python",
+ "tree-sitter-typescript",
+]
+
+[[package]]
 name = "lore_graph"
 version = "0.2.0"
 dependencies = [

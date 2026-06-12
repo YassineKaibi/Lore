@@ -1,0 +1,20 @@
+[package]
+name = "lore_derive"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lore_intent.workspace = true
+tree-sitter.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-typescript.workspace = true
+streaming-iterator.workspace = true
+# the parse cache stores extraction facts as JSON (D-064)
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
