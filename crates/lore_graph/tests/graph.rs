@@ -10,8 +10,9 @@ use lore_intent::{
 };
 
 /// The structural suite runs with no derived layer: an empty scope makes
-/// every claim Unverifiable — §9.1 applied, not a special case (D-063).
-/// The derived-layer interplay has its own suite (tests/derived.rs).
+/// every claim Unverifiable — §9.1 applied, not a special case (D-047e).
+/// The derived-layer interplay lives in tests/derived.rs, the four-status
+/// reconciliation in tests/reconcile.rs.
 fn build(
     declared: Vec<IntentNode>,
     manifest_modules: &[Spanned<String>],
@@ -22,6 +23,7 @@ fn build(
         manifest_modules,
         codeowners,
         DerivedLayer::empty(),
+        lore_graph::ReconcileInput::empty(),
     )
 }
 

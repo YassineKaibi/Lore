@@ -1,7 +1,8 @@
 //! Declared-ref resolution (§6.3): E0306 unresolved ref with the nearest
 //! existing qname, E0307 wrong-kind ref naming both kinds, W0205
 //! intra-module triggers (D-007). Failed refs produce no edge (D-047b).
-//! Claim statuses follow §9.1 minus the T7 Contradicted branch (D-063).
+//! Claim statuses follow the full §9.1 four-status algorithm (D-066),
+//! Contradicted claims surfacing as E0302 (strict) / W0302 (warn).
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -9,7 +10,7 @@ use std::path::PathBuf;
 use lore_intent::{Finding, Kind, QName, Ref, Spanned};
 
 use crate::matrix::{self, Clause};
-use crate::{ClaimStatus, Ctx, Edge, EdgeKind, Layer, OwnedFinding};
+use crate::{ClaimStatus, Ctx, Edge, EdgeKind, Layer, OwnedFinding, ReconcileInput, reconcile};
 
 /// The six ref clauses, their edge kinds, and required target kinds (§6.3).
 const REF_CLAUSES: [(Clause, EdgeKind, &[Kind], &str); 6] = [
@@ -38,6 +39,7 @@ const REF_CLAUSES: [(Clause, EdgeKind, &[Kind], &str); 6] = [
 
 pub(crate) fn resolve(
     ctx: &Ctx,
+    input: &ReconcileInput,
     derived_edges: &[Edge],
     scope: &HashSet<PathBuf>,
     findings: &mut Vec<OwnedFinding>,
@@ -102,7 +104,38 @@ pub(crate) fn resolve(
                         qname,
                     ));
                 }
-                let status = claim_status(edge_kind, qname, &target, target_node, scope, &index);
+                let (status, missing_ident) = claim_status(
+                    ctx,
+                    input,
+                    edge_kind,
+                    qname,
+                    &target,
+                    target_node,
+                    scope,
+                    &index,
+                );
+                if status == ClaimStatus::Contradicted {
+                    // D-066e: the code itself switches on enforcement (D-019)
+                    // — under strict this is an E finding from birth, so it
+                    // can never be silenced (D-056a).
+                    let code = if ctx.strict_module(qname) {
+                        "E0302"
+                    } else {
+                        "W0302"
+                    };
+                    let ident = missing_ident.expect("Contradicted always carries the symbol");
+                    findings.push(OwnedFinding::new(
+                        Finding::new(
+                            code,
+                            r.span.clone(),
+                            format!(
+                                "contradicted claim: \"{}: {target}\" on \"{qname}\", whose subject span never mentions \"{ident}\"; the code no longer does what the claim says — update or remove the clause",
+                                clause.name(),
+                            ),
+                        ),
+                        qname,
+                    ));
+                }
                 edges.push(Edge {
                     from: qname.clone(),
                     to: target,
@@ -118,34 +151,47 @@ pub(crate) fn resolve(
     edges
 }
 
-/// §9.1 minus its Contradicted branch (D-063): outside derivation scope →
+/// The full §9.1 algorithm (D-066): outside derivation scope →
 /// Unverifiable; matching derived edge (same-kind for Affects/Reads, Calls
-/// for Triggers) → Verified; otherwise Unverified. Emits/Handles/DependsOn
-/// stay Unverifiable in Phase 1.
-fn claim_status(
+/// for Triggers) → Verified; zero token occurrences of the target's bound
+/// host identifier in the claimant's subject span → Contradicted (returned
+/// with the missing symbol for the finding); otherwise Unverified. A target
+/// with no bound symbol or a span with no source text withholds the verdict
+/// (G-7). Emits/Handles/DependsOn stay Unverifiable in Phase 1.
+#[allow(clippy::too_many_arguments)] // the §9.1 inputs, no more
+fn claim_status<'a>(
+    ctx: &'a Ctx,
+    input: &'a ReconcileInput,
     edge_kind: EdgeKind,
     from: &QName,
     to: &QName,
     target_node: &lore_intent::IntentNode,
     scope: &HashSet<PathBuf>,
     index: &HashSet<(&QName, &QName, EdgeKind)>,
-) -> ClaimStatus {
+) -> (ClaimStatus, Option<&'a str>) {
     match edge_kind {
         EdgeKind::Affects | EdgeKind::Reads | EdgeKind::Triggers => {
             if !scope.contains(&target_node.loc.file) {
-                return ClaimStatus::Unverifiable;
+                return (ClaimStatus::Unverifiable, None);
             }
             let derived_kind = match edge_kind {
                 EdgeKind::Triggers => EdgeKind::Calls,
                 k => k,
             };
             if index.contains(&(from, to, derived_kind)) {
-                ClaimStatus::Verified
-            } else {
-                ClaimStatus::Unverified
+                return (ClaimStatus::Verified, None);
             }
+            // D-066: the symbol-occurrence test, independent of derived-edge
+            // classification — a Heuristic edge's absence alone never reads
+            // as proof the code changed (D-020).
+            if let Some(ident) = reconcile::host_identifier(ctx, input, to)
+                && reconcile::span_mentions(ctx, input, from, ident) == Some(false)
+            {
+                return (ClaimStatus::Contradicted, Some(ident));
+            }
+            (ClaimStatus::Unverified, None)
         }
-        _ => ClaimStatus::Unverifiable,
+        _ => (ClaimStatus::Unverifiable, None),
     }
 }
 

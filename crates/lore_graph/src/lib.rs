@@ -9,6 +9,7 @@ pub mod exec;
 mod hygiene;
 mod matrix;
 pub mod query;
+mod reconcile;
 mod resolve;
 mod structure;
 mod surface;
@@ -159,10 +160,53 @@ pub struct DerivedLayer {
 
 impl DerivedLayer {
     /// No derivation: scope is empty, so §9.1 labels every claim
-    /// Unverifiable — the algorithm, not a special case (D-047e, D-063).
+    /// Unverifiable — the algorithm, not a special case (D-047e).
     pub fn empty() -> DerivedLayer {
         DerivedLayer::default()
     }
+}
+
+/// Reconciliation inputs (§9, D-066/D-068): source text and git metadata as
+/// data, CLI-supplied — the graph never reads the filesystem or runs git.
+
+// @lore
+// kind: type
+// purpose: "Reconciliation as build input: source text for the symbol-occurrence test, the binder's host identifiers, and per-block git blame metadata"
+// because: "A claim is judged against what the code says now, so the judge needs the source text and the symbol the code would mention — handed in as data to keep the graph pure (D-066)"
+#[derive(Default)]
+pub struct ReconcileInput {
+    /// file -> text, for the §9.1 occurrence test.
+    pub sources: HashMap<PathBuf, String>,
+    /// Declared nodes' bound host identifiers (binder extraction; a `name:`
+    /// override changes the qname, never the matched symbol — D-066c).
+    pub host_identifiers: HashMap<QName, String>,
+    /// Per-block blame metadata; None = staleness skipped (outside a git
+    /// work tree, `--no-stale`, or a non-lint command — D-068).
+    pub staleness: Option<Vec<StalenessRecord>>,
+}
+
+impl ReconcileInput {
+    /// No source text, no symbols, no git: every in-scope unmatched claim
+    /// stays Unverified — §9.1 with its inputs withheld, not a special case.
+    pub fn empty() -> ReconcileInput {
+        ReconcileInput::default()
+    }
+}
+
+/// One annotation block's blame summary (§9.2, D-068), computed by the CLI.
+pub struct StalenessRecord {
+    pub qname: QName,
+    /// The block's span: where W0301 points.
+    pub span: Span,
+    /// Max committer-time over block lines, unix seconds.
+    pub t_block: i64,
+    /// Max committer-time over subject-span lines.
+    pub t_subject: i64,
+    /// ISO-strict renderings for the message.
+    pub t_block_iso: String,
+    pub t_subject_iso: String,
+    /// Hash of the subject line attaining the max.
+    pub subject_commit: String,
 }
 
 impl Graph {
@@ -230,6 +274,19 @@ impl Ctx {
         None
     }
 
+    /// Whether q's nearest enclosing Module declares `enforcement: strict`
+    /// (D-049's attribution rule; D-066e uses it to pick E0302 over W0302).
+    pub(crate) fn strict_module(&self, q: &QName) -> bool {
+        use lore_intent::Enforcement;
+        self.nearest_module(q).is_some_and(|m| {
+            self.nodes[&m]
+                .intent
+                .enforcement
+                .as_ref()
+                .is_some_and(|e| e.value == Enforcement::Strict)
+        })
+    }
+
     /// Every prefix of t (t included) naming a Module/Service/External node
     /// — the qnames whose presence in a depends_on satisfies a ref to t (D-048a).
     pub(crate) fn owner_chain(&self, t: &QName) -> Vec<QName> {
@@ -250,19 +307,21 @@ pub(crate) fn is_prefix_of(p: &QName, q: &QName) -> bool {
 
 /// Build the graph from both layers: node table with declared/derived
 /// merging (E0305, D-060), ambient manifest modules (D-046), applicability
-/// matrix (§3.2), resolution with interim claim statuses (§6.3, D-063),
-/// structural edges (D-047), depends_on surface (D-048), hygiene
-/// (W0210–W0212), and strict promotion (D-049). Findings come out sorted by
+/// matrix (§3.2), resolution with the full §9.1 claim statuses (§6.3,
+/// D-066), structural edges (D-047), depends_on surface (D-048), hygiene
+/// (W0210–W0212), undeclared effects (W0303, D-067), staleness (W0301,
+/// D-068), and strict promotion (D-049). Findings come out sorted by
 /// (file, line, col, code, message) — deterministic, always.
 
 // @lore
-// purpose: "Build the intent graph from both layers: node table with merging, structural and derived edges, resolution with claim statuses, and the lint findings"
-// because: "Claim statuses run §9.1 without its Contradicted branch until T7 lands reconciliation: a withheld verdict is honest, a false alarm is not (D-063)"
+// purpose: "Build the intent graph from both layers: node table with merging, structural and derived edges, resolution with the four-status reconciliation, and the lint findings"
+// because: "Contradicted needs the symbol-occurrence test, not derived-edge absence: a Heuristic edge that failed to classify must never read as proof the code changed (G-7, D-066)"
 pub fn build(
     declared: Vec<IntentNode>,
     manifest_modules: &[Spanned<String>],
     codeowners: Option<&Codeowners>,
     derived: DerivedLayer,
+    reconcile: ReconcileInput,
 ) -> Graph {
     let mut findings: Vec<OwnedFinding> = Vec::new();
     let ctx = table::build(declared, manifest_modules, derived.nodes, &mut findings);
@@ -278,7 +337,13 @@ pub fn build(
         .collect();
 
     matrix::check(&ctx, &mut findings);
-    let mut edges = resolve::resolve(&ctx, &derived_edges, &derived.scope, &mut findings);
+    let mut edges = resolve::resolve(
+        &ctx,
+        &reconcile,
+        &derived_edges,
+        &derived.scope,
+        &mut findings,
+    );
     edges.extend(structure::derive(&ctx));
     edges.extend(derived_edges);
     surface::check(&ctx, &edges, &mut findings);
@@ -287,6 +352,10 @@ pub fn build(
         codeowners::check(&ctx, co, &mut findings);
     }
     surface_unknowns(&ctx, &mut findings);
+    reconcile::undeclared_effects(&ctx, &edges, &mut findings);
+    if let Some(records) = &reconcile.staleness {
+        reconcile::staleness(records, &mut findings);
+    }
 
     promote_strict(&ctx, &mut findings);
 
@@ -352,22 +421,14 @@ fn surface_unknowns(ctx: &Ctx, findings: &mut Vec<OwnedFinding>) {
 /// D-049: W findings from bands 02x/03x attributed to a node whose nearest
 /// module declares `enforcement: strict` become errors; the code stays.
 fn promote_strict(ctx: &Ctx, findings: &mut [OwnedFinding]) {
-    use lore_intent::{Enforcement, Severity};
+    use lore_intent::Severity;
     for f in findings.iter_mut() {
         let code = f.finding.code;
         if !(code.starts_with("W02") || code.starts_with("W03")) {
             continue;
         }
         let Some(node) = &f.node else { continue };
-        let Some(module) = ctx.nearest_module(node) else {
-            continue;
-        };
-        let strict = ctx.nodes[&module]
-            .intent
-            .enforcement
-            .as_ref()
-            .is_some_and(|e| e.value == Enforcement::Strict);
-        if strict {
+        if ctx.strict_module(node) {
             f.finding.severity = Severity::Error;
         }
     }
