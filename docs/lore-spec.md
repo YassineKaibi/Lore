@@ -348,15 +348,13 @@ else if f's subject span contains zero occurrences
 else                                                -> Unverified
 ```
 
-`Emits`/`Handles`/`DependsOn` claims: `Unverifiable` in Phase 1 (Phase 2 verifies all of them). "Matching derived edge" for `Triggers` means a derived `Calls` edge f→t; for `Affects`/`Reads`, a derived edge of the same kind f→t.
+`Emits`/`Handles`/`DependsOn` claims: `Unverifiable` in Phase 1 (Phase 2 verifies all of them). "Matching derived edge" for `Triggers` means a derived `Calls` edge f→t; for `Affects`/`Reads`, a derived edge of the same kind f→t. Test inputs, the per-target bound host identifier, the token-match definition, and the `E0302`/`W0302` code choice are per D-066; a target (or claim source) whose symbol or span text is unavailable can never be `Contradicted` -- the claim stays `Unverified` (G-7).
 
-*Note (transitional, D-063):* between T6 and T7 the algorithm runs without its `Contradicted` branch -- a claim that branch would catch surfaces as `Unverified`, and no `W0302`/`E0302` is emitted before T7.
-
-**Undeclared effects:** a derived `Affects` edge from an *annotated* function with no corresponding declaration → `W0303`, default off via `[policy] undeclared_effects = "off"` (D-019). Unannotated functions are never penalized.
+**Undeclared effects:** a derived `Affects` edge from an *annotated* function with no corresponding declaration → `W0303`, default off via `[policy] undeclared_effects = "off"` (D-019; mechanics per D-067 -- the graph always carries the base Warning, the policy applies at the lint surface). Unannotated functions are never penalized.
 
 ### 9.2 Staleness (D-018)
 
-For each annotation block: let `t_subject = max(commit time over subject-span lines)`, `t_block = max(commit time over block lines)`, both via `git blame --line-porcelain`. If `t_subject > t_block` → `W0301 stale-intent`, reporting both timestamps and the subject's most recent commit hash. Outside a git work tree: check skipped, one notice line. Promotable to error via `[policy] stale = "error"`.
+For each annotation block: let `t_subject = max(commit time over subject-span lines)`, `t_block = max(commit time over block lines)`, both via `git blame --line-porcelain`. If `t_subject > t_block` → `W0301 stale-intent`, reporting both timestamps and the subject's most recent commit hash. Outside a git work tree: check skipped, one notice line. Promotable to error via `[policy] stale = "error"`. Mechanics per D-068: `lore lint` gathers the blame metadata (committer-time; `--no-stale` skips; `ask`/`stats` never gather) and `lore_graph::build` applies the comparison, so attribution and strict promotion work like any graph finding.
 
 ### 9.3 `lore history <qname>`
 
@@ -558,6 +556,24 @@ pub struct DerivedLayer {
     pub nodes: Vec<IntentNode>,          // origin Derived, empty intent (§8.1)
     pub edges: Vec<Edge>,                // layer Derived: Calls/Affects/Reads with confidence
     pub scope: HashSet<PathBuf>,         // derivation scope (D-061): §9.1's in-scope test
+}
+
+// Reconciliation inputs (§9, D-066/D-068): source text and git metadata as
+// data, CLI-supplied -- the graph never reads the filesystem or runs git.
+pub struct ReconcileInput {
+    pub sources: HashMap<PathBuf, String>,        // file -> text, for the §9.1 occurrence test
+    pub host_identifiers: HashMap<QName, String>, // declared nodes' bound host identifiers (binder extraction)
+    pub staleness: Option<Vec<StalenessRecord>>,  // None = check skipped (no git / --no-stale / non-lint command)
+}
+
+pub struct StalenessRecord {                      // one per annotation block with a subject span (D-068)
+    pub qname: QName,
+    pub span: Span,                               // the block's span: where W0301 points
+    pub t_block: i64,                             // max committer-time over block lines, unix seconds
+    pub t_subject: i64,                           // max committer-time over subject-span lines
+    pub t_block_iso: String,                      // ISO-strict renderings for the message
+    pub t_subject_iso: String,
+    pub subject_commit: String,                   // hash of the subject line attaining the max
 }
 ```
 
