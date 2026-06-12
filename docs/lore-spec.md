@@ -266,7 +266,7 @@ Blocks of kind `module`, `service`, or `workflow` are **scoping blocks** (§7.5)
 | Java | `//` | `method_declaration`, `constructor_declaration`, `class_declaration`, `interface_declaration`, `enum_declaration`, `record_declaration`, `field_declaration` | `marker_annotation`, `annotation` |
 | Rust | `//` | `function_item`, `struct_item`, `enum_item`, `trait_item`, `static_item`, `const_item`, `mod_item` | `attribute_item` |
 
-Adding a language = adding one row here plus its derivation queries (§8.5). The roadmap fixes the order (D-014). Subject identifiers come from the per-node tree-sitter fields listed in D-042 (Python, TypeScript) and D-050 (Rust). Rust's `attribute_item` is a preceding-sibling skip, not a descend wrapper (D-050).
+Adding a language = adding one row here plus a language pack realizing it (§8.6; before T8, per-language code per §8.5). The roadmap fixes the order (D-014). This table remains normative under packs: a builtin pack MUST realize exactly its row's values, enforced by its conformance fixtures (D-070). Subject identifiers come from the per-node tree-sitter fields listed in D-042 (Python, TypeScript) and D-050 (Rust), carried from T8 as `@subject.name` captures in the pack's `bind.scm` (§8.6.3). Rust's `attribute_item` is a preceding-sibling skip, not a descend wrapper (D-050).
 
 ### 7.5 Module scoping (D-015)
 
@@ -297,7 +297,7 @@ For every call expression inside a function body, resolve the callee:
 2. **Resolved:** callee is imported, and the import resolves (per-language rules below) to a file inside derivation scope. Confidence `Resolved`.
 3. Otherwise: **dropped**, counted in `lore stats` as `unresolved_calls`. Never guess (D-020).
 
-Import resolution v1: Python -- `import m [as a]` / `from m import n [as a]` against the project source root(s) in `lore.toml [project] roots` (relative imports drop); TypeScript -- relative imports only (`./`, `../`, resolving `<p>.ts|.tsx|.js` or `<p>/index.ts`), named (`{ n [as a] }`) and namespace (`* as m`) forms (default imports drop); Go -- same-package files + intra-module import paths; Java -- same package + explicit single-type imports; Rust -- `use crate::...` paths within the workspace. Anything else (aliases beyond one level, dynamic import, re-exports, star imports, dotted callees deeper than `alias.name(...)`) is out of v1 scope and falls to rule 3 (D-062c).
+Import resolution v1: Python -- `import m [as a]` / `from m import n [as a]` against the project source root(s) in `lore.toml [project] roots` (relative imports drop); TypeScript -- relative imports only (`./`, `../`, resolving `<p>.ts|.tsx|.js` or `<p>/index.ts`), named (`{ n [as a] }`) and namespace (`* as m`) forms (default imports drop); Go -- same-package files + intra-module import paths; Java -- same package + explicit single-type imports; Rust -- `use crate::...` paths within the workspace. Anything else (aliases beyond one level, dynamic import, re-exports, star imports, dotted callees deeper than `alias.name(...)`) is out of v1 scope and falls to rule 3 (D-062c). From T8 these rules are realized as pack-selected strategies from the built-in strategy library (§8.6.1, D-071); the semantics above are unchanged.
 
 Every call and state touch attributes to the nearest enclosing derived `Function` node; a call with no such node (module/class level, value-bound lambdas, declarations dropped per D-060d), or one resolving to a non-`Function` node, is dropped and counted in `unresolved_calls` (D-062a/b).
 
@@ -323,11 +323,106 @@ Occurrence matching (D-062d): the symbol matches bare in same-language files of 
 
 Every surface that prints a derived edge MUST print its confidence. `Heuristic` absence alone MUST NOT produce a `Contradicted` status (§9.1 uses the symbol-occurrence test instead).
 
-### 8.5 Implementation note
+### 8.5 Language support artifacts
 
-Each language contributes: (a) a tree-sitter grammar dependency, (b) declaration queries (`.scm`), (c) call-expression queries, (d) import-resolution rules, (e) a mutator list. These five artifacts per language live under `lore_derive/src/lang/<name>/` and are the complete definition of language support.
+Each language contributes: (a) a tree-sitter grammar dependency, (b) declaration queries (`.scm`), (c) call-expression queries, (d) import-resolution rules, (e) a mutator list. From T8 these five artifacts are packaged as a **language pack** (§8.6, D-070): one `lore-lang.toml` plus two `.scm` query files plus a mandatory conformance fixture suite, loaded through one generic adapter -- there is no per-language Rust code (sole exception: named custom import strategies, D-071). The pre-T8 layout (`lore_derive/src/lang/<name>/`) is superseded; Python and TypeScript migrate onto packs at T8 with behavior unchanged (D-070h).
 
-The parse cache (§10.7, G-9) stores per-file extraction facts keyed by content hash, not serialized trees; all cross-file resolution is recomputed from facts every run (D-064).
+The parse cache (§10.7, G-9) stores per-file extraction facts keyed by content hash, not serialized trees; all cross-file resolution is recomputed from facts every run (D-064). The cache key includes the pack identity -- name, format version, content hash of the pack files -- so editing a pack invalidates its facts (D-070i).
+
+### 8.6 Language packs (normative from T8 -- D-070, D-071)
+
+A supported language is defined by a language pack. Builtin packs live at `packs/<name>/` in the workspace, are embedded into the binary at build time, and use statically linked tree-sitter grammars (workspace-pinned). Layout:
+
+```
+packs/go/
+  lore-lang.toml        # pack manifest (§8.6.1)
+  queries/bind.scm      # declaration recognition + identifiers (tier bind+)
+  queries/derive.scm    # calls, imports, state-touch forms (tier derive)
+  fixtures/             # mandatory conformance suite (§8.6.4)
+```
+
+`lore_cli` parses and validates packs and passes them to `lore_annotations` / `lore_derive` as data plus a grammar handle; the adapters compile the query files at activation (D-070d). A pack that fails any check in this section MUST NOT be activated -- the language is simply not loaded, never partially.
+
+#### 8.6.1 Pack manifest: `lore-lang.toml`
+
+Normative keys. An unknown key, missing required key, invalid value, tier/artifact mismatch, or an extension claimed by two loaded packs is `E0410`.
+
+| Key | Required | Meaning |
+|---|---|---|
+| `[pack] name` | R | Language id; MUST equal the pack directory name and is the value used in `lore.toml [project] languages`. |
+| `[pack] format` | R | Integer pack-format version. This spec defines version **1**. An unknown version is `E0412`; the pack is refused before anything else is read. |
+| `[pack] tier` | R | `"scan"` \| `"bind"` \| `"derive"` (§8.6.2). |
+| `[grammar] source` | R (bind+) | `"builtin"` in v1. `"wasm"` is reserved key space: recognized and refused with `E0413` -- later acceptance widens a value domain, never changes the format. |
+| `[grammar] name` | R when `source = "builtin"` | Id of the statically linked grammar (e.g. `tree_sitter_go`); unknown id is `E0413`. |
+| `[grammar] path` | reserved | WASM grammar file, used with `source = "wasm"`. |
+| `[scanner] extensions` | R | File extensions the pack claims (e.g. `[".go"]`). |
+| `[scanner] comment_token` | R | Line-comment token (§7.1). |
+| `[binder] wrappers` | O (bind+) | Descend-wrapper node types (§7.3, D-042). |
+| `[binder] sibling_skips` | O (bind+) | Preceding-sibling skip node types (D-050c). |
+| `[derive] mutators.methods` | O (derive) | Method names that mutate a receiver state symbol (§8.3). |
+| `[derive] mutators.free_functions` | O (derive) | Free functions that mutate their first state-symbol argument (§8.3; e.g. Go `delete`). |
+| `[[derive.imports.strategy]]` | R (derive) | Ordered strategy stanzas: `kind` = `"relative"` \| `"root_relative"` \| `"package_dir"` \| `"manifest_prefix"` \| `"custom"` plus per-kind params (D-071). Tried in order; first resolution wins; no resolution -> drop and count (§8.2 rule 3). |
+
+Example (Go):
+
+```toml
+[pack]
+name   = "go"
+format = 1
+tier   = "derive"
+
+[grammar]
+source = "builtin"
+name   = "tree_sitter_go"
+
+[scanner]
+extensions    = [".go"]
+comment_token = "//"
+
+[derive.mutators]
+free_functions = ["delete"]
+
+[[derive.imports.strategy]]
+kind = "package_dir"
+extensions = [".go"]
+
+[[derive.imports.strategy]]
+kind = "manifest_prefix"
+manifest_file = "go.mod"
+prefix_key = "module"
+```
+
+#### 8.6.2 Tiers
+
+Cumulative; the declared tier MUST match the artifacts present in both directions (`E0410`).
+
+- **`scan`** -- scanner only; no grammar. Scoping blocks (§7.5) work in full. A non-scoping block MUST carry `name:` (`E0109`) and binds to no subject: qname = §7.5 module + name, loc = the block span, no subject span -- so it is never staleness-checked (D-068d) and its claims can never be `Contradicted` (D-066c). Files never enter derivation scope.
+- **`bind`** -- adds `[grammar]` + `bind.scm`: full §7 binding (subjects, host identifiers, `E0102`, subject spans -- staleness and the §9.1 occurrence test apply).
+- **`derive`** -- adds `derive.scm`, import strategies, and mutator lists: files enter derivation scope (§2, D-061) and §8.1--§8.4 apply.
+
+*Note: a tier is the honest statement of roadmap risk 1's "ship it scanner+binder-only and say so" -- declared in data, surfaced by `lore stats`.*
+
+#### 8.6.3 Query files and capture vocabulary
+
+The generic adapter understands a fixed capture vocabulary; any other capture name is `E0411`.
+
+**`bind.scm`** (tier bind+): each pattern marks a §7.4 declaration node with exactly one of `@subject.function` (derives `Function`), `@subject.type` (derives `Type`), or `@subject.value` (value-binding form: bindable, derives no node -- D-060a), and captures its identifier as `@subject.name` (the §7.3 host identifier). A form whose pattern cannot capture a single `@subject.name` (multi-target forms) requires an explicit `name:` in the block (`E0104`).
+
+**`derive.scm`** (tier derive): `@call` / `@call.callee` -- call expression and its callee identifier or path (§8.2 resolution applies); `@import` with `@import.source`, `@import.name`, `@import.alias`, `@import.namespace` -- import forms, where **uncaptured forms drop**: the v1 exclusions of §8.2 (default imports, star imports, ...) are expressed by not capturing them, never by adapter special cases; `@touch.assign_lhs`, `@touch.aug_assign_lhs`, `@touch.receiver`, `@touch.call_function` -- state-touch classification sites, combined with the mutator lists per §8.3 (lhs/receiver token equal to a state symbol -> write; any other matched occurrence -> read; confidence `Heuristic` always).
+
+Binder mechanics (D-042/D-044 wrapper descent and same-row search, D-050 sibling skips), the drop rules, and confidence labeling (§8.2--§8.4) are engine behavior, identical for every pack; a pack supplies only the data above.
+
+#### 8.6.4 Conformance protocol
+
+Mandatory; this is how packs protect G-7. `fixtures/<class>/<case>/` holds input source files plus an `expected.json` carrying the exact expected output (block sets / derived nodes and edges with confidences / findings -- the same shapes as the corresponding `--json` outputs). Mandatory classes by tier:
+
+| Tier | Class | MUST include |
+|---|---|---|
+| scan+ | `scan` | Exact block sets; >=1 negative: comment text that MUST NOT scan as a block (e.g. block comments, §7.1). |
+| bind+ | `bind` | >=1 positive per `@subject.*` capture kind used; wrapper/skip exercise when declared; >=1 negative producing `E0102`. |
+| derive | `derive` | Exact derived node/edge sets with confidences; >=1 required absence (a call that MUST be dropped); per configured import strategy, >=1 resolved and >=1 dropped import; >=1 write and >=1 read state touch; >=1 negative occurrence that MUST NOT classify as a write. |
+
+A pack missing a mandatory class (or with an empty one), or whose suite has not passed for its exact content, MUST NOT be activated (`E0415`). Builtin packs are enforced in CI by the **conformance harness** -- a `lore_cli` test running every embedded pack's suite through the real scan→bind→derive pipeline -- so a failing pack cannot ship. Future external packs (reserved, like WASM grammars) run the suite at first load.
 
 ---
 
@@ -805,10 +900,11 @@ Every diagnostic MUST state: what went wrong (plain language), where (file:line 
 
 | Band | Area |
 |---|---|
-| E010x/W010x | Scanner & binder (`E0102` unbound annotation, `E0103` overlapping module globs, `E0104` ambiguous assignment target, `E0105` step outside workflow, `E0106` invalid kind value, `E0107` invalid name value, `E0108` scoping block missing name) |
+| E010x/W010x | Scanner & binder (`E0102` unbound annotation, `E0103` overlapping module globs, `E0104` ambiguous assignment target, `E0105` step outside workflow, `E0106` invalid kind value, `E0107` invalid name value, `E0108` scoping block missing name, `E0109` non-scoping block missing name in a scan-tier language -- D-070) |
 | E020x/W020x | Intent parsing & applicability (`E0201` missing required intent, `E0202` unknown clause, `E0203` illegal clause for kind, `E0204` empty step, `E0205` route outside service, `E0206` duplicate singular clause, `E0207` malformed clause, `W0205` intra-module triggers, `W0206` unused depends_on, `W0207` CODEOWNERS mismatch, `W0208` orphan file, `W0209` missing recommended purpose, `W0213` declared unknown -- D-057) |
 | E030x/W030x | Graph, reconciliation, hygiene (`E0302/W0302` contradicted claim, `E0304` undeclared dependency use, `E0305` duplicate qname, `E0306` unresolved ref, `E0307` wrong-kind ref, `W0301` stale intent, `W0303` undeclared effect, `W0210` orphaned state, `W0211` event without handlers, `W0212` event without emitters) |
 | E040x | Manifest (`E0401` unknown key, `E0402` missing manifest, `E0403` invalid manifest value) |
+| E041x | Language packs, §8.6 (D-070: `E0410` invalid pack manifest, `E0411` unusable pack artifact, `E0412` unsupported pack format version, `E0413` grammar unavailable, `E0414` unknown or misconfigured import strategy, `E0415` conformance failure) |
 | E05xx | Phase 2 semantics (§16) |
 | E06xx | VM/runtime (reserved) |
 
