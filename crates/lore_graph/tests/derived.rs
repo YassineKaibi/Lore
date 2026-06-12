@@ -182,6 +182,34 @@ fn same_declaration_merges_into_origin_both_keeping_declared_intent() {
 }
 
 #[test]
+fn declared_refs_resolve_against_derived_only_nodes() {
+    // Open world (§7.6, D-017): `triggers: Payment.helper` where helper
+    // exists only in the derived layer — no E0306, a normal claim edge.
+    let mut intent = Intent::default();
+    intent.triggers = vec![r("Payment.helper", 4)];
+    let g = build(
+        vec![node("User.signup", Kind::Function, 3, intent)],
+        &mods(&["Payment", "User"]),
+        None,
+        layer(
+            vec![derived_node(
+                "Payment.helper",
+                Kind::Function,
+                "src/a.py",
+                12,
+            )],
+            vec![],
+            &["src/a.py"],
+        ),
+    );
+    assert_eq!(findings(&g), [("E0304", 4)]); // the honest surface check still applies
+    assert_eq!(
+        status_of(&g, "User.signup", EdgeKind::Triggers),
+        ClaimStatus::Unverified // in scope, no derived Calls yet
+    );
+}
+
+#[test]
 fn derived_only_nodes_join_the_table_without_requirement_findings() {
     // a derived-only Function never fires E0201/W0209 (D-046)
     let g = build(
