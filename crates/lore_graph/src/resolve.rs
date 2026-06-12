@@ -1,6 +1,10 @@
 //! Declared-ref resolution (§6.3): E0306 unresolved ref with the nearest
 //! existing qname, E0307 wrong-kind ref naming both kinds, W0205
 //! intra-module triggers (D-007). Failed refs produce no edge (D-047b).
+//! Claim statuses follow §9.1 minus the T7 Contradicted branch (D-063).
+
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 use lore_intent::{Finding, Kind, QName, Ref, Spanned};
 
@@ -32,7 +36,16 @@ const REF_CLAUSES: [(Clause, EdgeKind, &[Kind], &str); 6] = [
     ),
 ];
 
-pub(crate) fn resolve(ctx: &Ctx, findings: &mut Vec<OwnedFinding>) -> Vec<Edge> {
+pub(crate) fn resolve(
+    ctx: &Ctx,
+    derived_edges: &[Edge],
+    scope: &HashSet<PathBuf>,
+    findings: &mut Vec<OwnedFinding>,
+) -> Vec<Edge> {
+    let index: HashSet<(&QName, &QName, EdgeKind)> = derived_edges
+        .iter()
+        .map(|e| (&e.from, &e.to, e.kind))
+        .collect();
     let mut edges = Vec::new();
     for qname in &ctx.order {
         let node = &ctx.nodes[qname];
@@ -89,21 +102,51 @@ pub(crate) fn resolve(ctx: &Ctx, findings: &mut Vec<OwnedFinding>) -> Vec<Edge> 
                         qname,
                     ));
                 }
+                let status = claim_status(edge_kind, qname, &target, target_node, scope, &index);
                 edges.push(Edge {
                     from: qname.clone(),
                     to: target,
                     kind: edge_kind,
                     layer: Layer::Declared,
                     loc: r.span.clone(),
-                    // §9.1 with an empty derivation scope (no lore_derive
-                    // until T6): every target is outside scope (D-047e).
-                    status: Some(ClaimStatus::Unverifiable),
+                    status: Some(status),
                     confidence: None,
                 });
             }
         }
     }
     edges
+}
+
+/// §9.1 minus its Contradicted branch (D-063): outside derivation scope →
+/// Unverifiable; matching derived edge (same-kind for Affects/Reads, Calls
+/// for Triggers) → Verified; otherwise Unverified. Emits/Handles/DependsOn
+/// stay Unverifiable in Phase 1.
+fn claim_status(
+    edge_kind: EdgeKind,
+    from: &QName,
+    to: &QName,
+    target_node: &lore_intent::IntentNode,
+    scope: &HashSet<PathBuf>,
+    index: &HashSet<(&QName, &QName, EdgeKind)>,
+) -> ClaimStatus {
+    match edge_kind {
+        EdgeKind::Affects | EdgeKind::Reads | EdgeKind::Triggers => {
+            if !scope.contains(&target_node.loc.file) {
+                return ClaimStatus::Unverifiable;
+            }
+            let derived_kind = match edge_kind {
+                EdgeKind::Triggers => EdgeKind::Calls,
+                k => k,
+            };
+            if index.contains(&(from, to, derived_kind)) {
+                ClaimStatus::Verified
+            } else {
+                ClaimStatus::Unverified
+            }
+        }
+        _ => ClaimStatus::Unverifiable,
+    }
 }
 
 fn refs_of(node: &lore_intent::IntentNode, clause: Clause) -> &[Spanned<Ref>] {

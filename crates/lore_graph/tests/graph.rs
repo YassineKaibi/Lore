@@ -4,10 +4,26 @@
 // fixtures read clearest as default-then-assign, one clause per line
 #![allow(clippy::field_reassign_with_default)]
 
-use lore_graph::{ClaimStatus, Confidence, EdgeKind, Graph, Layer, build};
+use lore_graph::{ClaimStatus, Confidence, DerivedLayer, EdgeKind, Graph, Layer};
 use lore_intent::{
     Enforcement, Intent, IntentNode, Kind, Origin, QName, Ref, Route, Severity, Span, Spanned,
 };
+
+/// The structural suite runs with no derived layer: an empty scope makes
+/// every claim Unverifiable — §9.1 applied, not a special case (D-063).
+/// The derived-layer interplay has its own suite (tests/derived.rs).
+fn build(
+    declared: Vec<IntentNode>,
+    manifest_modules: &[Spanned<String>],
+    codeowners: Option<&lore_graph::Codeowners>,
+) -> Graph {
+    lore_graph::build(
+        declared,
+        manifest_modules,
+        codeowners,
+        DerivedLayer::empty(),
+    )
+}
 
 fn sp(line: u32) -> Span {
     Span {

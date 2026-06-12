@@ -8,8 +8,23 @@
 
 use lore_graph::exec::{Answer, Hit, Options, ask};
 use lore_graph::query::parse;
-use lore_graph::{EdgeKind, Graph, build};
+use lore_graph::{DerivedLayer, EdgeKind, Graph};
 use lore_intent::{Intent, IntentNode, Kind, Origin, QName, Ref, Route, Span, Spanned};
+
+/// The query suite exercises declared + structural edges; derived-edge
+/// traversal is covered in tests/derived.rs. Empty scope: all Unverifiable.
+fn build(
+    declared: Vec<IntentNode>,
+    manifest_modules: &[Spanned<String>],
+    codeowners: Option<&lore_graph::Codeowners>,
+) -> Graph {
+    lore_graph::build(
+        declared,
+        manifest_modules,
+        codeowners,
+        DerivedLayer::empty(),
+    )
+}
 
 fn sp(line: u32) -> Span {
     Span {
