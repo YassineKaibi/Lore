@@ -68,6 +68,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Coverage counts: nodes by kind/origin, declared intent per kind,
+    /// unresolved_calls and ambiguous_derived_names (D-065)
+    Stats {
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() {
@@ -106,6 +112,10 @@ fn run(cli: Cli) -> i32 {
         },
         Command::History { ref qname, json } => match discover_manifest(&cli) {
             Some(path) => commands::history::run(&path, qname, json, cli.quiet),
+            None => 2,
+        },
+        Command::Stats { json } => match discover_manifest(&cli) {
+            Some(path) => commands::stats::run(&path, json, cli.quiet),
             None => 2,
         },
     }

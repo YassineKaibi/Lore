@@ -29,7 +29,7 @@ pub fn run(
         Ok(p) => p,
         Err(code) => return code,
     };
-    let (graph, _scan_findings) = project::build_graph(&p, manifest_path);
+    let graph = project::build_graph(&p, manifest_path).graph;
 
     let parsed = match query::parse(query_text) {
         Ok(q) => q,

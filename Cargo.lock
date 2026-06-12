@@ -298,6 +298,7 @@ version = "0.2.0"
 dependencies = [
  "clap",
  "lore_annotations",
+ "lore_derive",
  "lore_graph",
  "lore_intent",
  "serde",

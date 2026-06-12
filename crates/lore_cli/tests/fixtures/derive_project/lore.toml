@@ -1,0 +1,8 @@
+[project]
+name = "derive_project"
+languages = ["python"]
+roots = ["src"]
+
+[modules]
+"src/pay/**" = "Payment"
+"src/user/**" = "User"

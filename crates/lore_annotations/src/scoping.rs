@@ -19,12 +19,15 @@ impl<'a> CompiledGlobs<'a> {
     }
 }
 
+/// Returns the qnamed blocks plus the file's effective module (§7.5: glob
+/// mapping, overridden by a top-of-file scoping block) — the module feeds
+/// the derivation scope (D-061).
 pub(crate) fn scope_file(
     globs: &CompiledGlobs<'_>,
     file: &SourceFile,
     bound: Vec<BoundBlock>,
     findings: &mut Vec<Finding>,
-) -> Vec<ScannedBlock> {
+) -> (Vec<ScannedBlock>, Option<String>) {
     let file_span = Span {
         file: file.path.clone(),
         line: 1,
@@ -132,7 +135,7 @@ pub(crate) fn scope_file(
             "{} belongs to no module, so its subjects get the \"_orphan\" qname prefix; map it under [modules] in lore.toml or add a top-of-file module block",
             file.path.display())));
     }
-    out
+    (out, module)
 }
 
 fn qualified(module: Option<&str>, name: &str) -> QName {

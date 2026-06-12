@@ -27,7 +27,7 @@ pub fn run(manifest_path: &Path, qname: &str, json: bool, quiet: bool) -> i32 {
         Ok(p) => p,
         Err(code) => return code,
     };
-    let (graph, _scan_findings) = project::build_graph(&p, manifest_path);
+    let graph = project::build_graph(&p, manifest_path).graph;
 
     // D-059a: the argument must name a node; mirror ask's D-053a failure.
     let node = match lore_graph::exec::lookup(&graph, &QName::from_dotted(qname)) {

@@ -67,12 +67,15 @@ fn affects_star_renders_the_event_hop_chain_with_per_hop_labels() {
         &fixture("ask_project"),
     );
     assert_eq!(out.status.code(), Some(0));
+    // T6: the fixture's files are in derivation scope, and the affects
+    // claims have no matching derived edge (pass bodies) — Unverified, the
+    // honest withheld verdict (D-063); emits stays Unverifiable (Phase 1).
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         "affects*(Payment.ledger): 2 results\n\
-         Payment.audit   Function  src/pay/svc.py:28  [via: Affects]  [Declared/Unverifiable]\n\
+         Payment.audit   Function  src/pay/svc.py:28  [via: Affects]  [Declared/Unverified]\n\
          Payment.charge  Function  src/pay/svc.py:22  [via: Emits -> Handles -> Affects]  \
-         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Unverifiable]\n"
+         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Unverified]\n"
     );
 }
 
@@ -87,7 +90,7 @@ fn path_renders_the_shortest_witnessed_chain() {
         String::from_utf8_lossy(&out.stdout),
         "path(Payment.charge, Payment.ledger): 1 result\n\
          Payment.ledger  State  src/pay/svc.py:4  [via: Emits -> Handles -> Affects]  \
-         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Unverifiable]\n"
+         [Declared/Unverifiable -> Declared/Unverifiable -> Declared/Unverified]\n"
     );
 }
 
@@ -110,15 +113,17 @@ fn show_renders_the_full_node_card() {
         &fixture("ask_project"),
     );
     assert_eq!(out.status.code(), Some(0));
+    // origin Both: the annotation and the derived layer index the same
+    // declaration and merged (§8.1, D-060b)
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
-        "Payment.charge  Function  Declared  src/pay/svc.py:22\n\
+        "Payment.charge  Function  Both  src/pay/svc.py:22\n\
          \x20 purpose: \"Charge a customer\"\n\
          \x20 unknown: \"Concurrent charge + refund untested\"\n\
          \x20 reads: Payment.balances\n\
          \x20 emits: Payment.Settled\n\
          edges out:\n\
-         \x20 Reads -> Payment.balances  [Declared/Unverifiable]\n\
+         \x20 Reads -> Payment.balances  [Declared/Unverified]\n\
          \x20 Emits -> Payment.Settled  [Declared/Unverifiable]\n\
          edges in:\n\
          \x20 Contains <- Payment  [Derived/Exact]\n\
@@ -170,7 +175,7 @@ fn ask_json_matches_the_schema_exactly() {
                     "location": {"file": "src/pay/svc.py", "line": 28},
                     "via": [
                         {"from": "Payment.audit", "to": "Payment.ledger",
-                         "edge": "Affects", "layer": "Declared", "status": "Unverifiable"}
+                         "edge": "Affects", "layer": "Declared", "status": "Unverified"}
                     ]
                 }
             ],
@@ -190,7 +195,7 @@ fn show_json_returns_the_node_card_with_edge_arrays() {
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["node"]["qname"], "Payment.audit");
     assert_eq!(v["node"]["kind"], "Function");
-    assert_eq!(v["node"]["origin"], "Declared");
+    assert_eq!(v["node"]["origin"], "Both"); // merged with its derived node (D-060b)
     assert_eq!(
         v["node"]["intent"]["on"],
         serde_json::json!(["Payment.Settled"])
@@ -235,7 +240,7 @@ fn ask_answers_on_a_project_with_findings_and_reports_unresolved_refs() {
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         "reads(Payment.balances): 1 result\n\
-         Payment.charge  Function  src/pay/svc.py:16  [via: Reads]  [Declared/Unverifiable]\n\
+         Payment.charge  Function  src/pay/svc.py:16  [via: Reads]  [Declared/Unverified]\n\
          note: 1 unresolved ref in the graph (run lore lint): Payment.ledgr\n"
     );
 

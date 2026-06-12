@@ -3,7 +3,6 @@
 // name: Derive
 // purpose: "Build the derived layer: Function/Type nodes and Calls/Affects/Reads edges extracted from host source, every edge carrying a confidence"
 // owner: "lore-core"
-// depends_on: Intent
 
 //! The derived layer (spec §8): static extraction from host source. Input:
 //! the files in derivation scope (D-061) plus the declared state symbols;
