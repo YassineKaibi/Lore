@@ -10,8 +10,29 @@ use std::path::PathBuf;
 
 use lore_graph::exec::{Answer, Options, ask};
 use lore_graph::query::parse;
-use lore_graph::{ClaimStatus, Confidence, DerivedLayer, Edge, EdgeKind, Graph, Layer, build};
+use lore_graph::{
+    ClaimStatus, Confidence, DerivedLayer, Edge, EdgeKind, Graph, Layer, ReconcileInput,
+};
 use lore_intent::{Intent, IntentNode, Kind, Origin, QName, Ref, Span, Spanned};
+
+/// This suite exercises the layer merge and traversals with reconciliation
+/// inputs withheld: no source text, so §9.1's occurrence test never runs
+/// and in-scope unmatched claims stay Unverified. The four-status algorithm
+/// has its own suite (tests/reconcile.rs, D-066).
+fn build(
+    declared: Vec<IntentNode>,
+    manifest_modules: &[Spanned<String>],
+    codeowners: Option<&lore_graph::Codeowners>,
+    derived: DerivedLayer,
+) -> Graph {
+    lore_graph::build(
+        declared,
+        manifest_modules,
+        codeowners,
+        derived,
+        ReconcileInput::empty(),
+    )
+}
 
 fn sp_in(file: &str, line: u32) -> Span {
     Span {
@@ -241,10 +262,10 @@ fn derived_only_nodes_join_the_table_without_requirement_findings() {
     );
 }
 
-// ---- claim statuses (D-063) ----
+// ---- claim statuses with reconciliation inputs withheld (D-066c) ----
 
 #[test]
-fn claim_statuses_follow_section_9_1_without_the_contradicted_branch() {
+fn claim_statuses_withhold_the_verdict_when_no_source_text_is_supplied() {
     let mut charge = Intent::default();
     charge.affects = vec![r("Payment.ledger", 10)]; // matching derived edge -> Verified
     charge.reads = vec![r("Payment.balances", 11)]; // in scope, no derived edge -> Unverified

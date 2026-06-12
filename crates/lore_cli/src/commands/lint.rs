@@ -10,7 +10,7 @@ use lore_intent::Severity;
 
 use crate::commands::project;
 use crate::output;
-use lore_cli::manifest::{LintLevel, PolicyLevel};
+use lore_cli::manifest::{LintLevel, PolicyLevel, UndeclaredEffects};
 
 // @lore
 // name: lint
@@ -35,6 +35,13 @@ pub fn run(manifest_path: &Path, json: bool, no_stale: bool, quiet: bool, no_col
         for f in findings.iter_mut().filter(|f| f.code == "W0213") {
             f.severity = Severity::Error;
         }
+    }
+
+    // D-067b: undeclared effects are off by default — they punish low
+    // coverage (D-019). The graph always carries them; ask/show still
+    // render them unfiltered (D-056c).
+    if matches!(p.manifest.policy.undeclared_effects, UndeclaredEffects::Off) {
+        findings.retain(|f| f.code != "W0303");
     }
 
     // D-056: [lint] overrides, after promotion. "off" suppresses the code

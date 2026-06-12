@@ -23,6 +23,7 @@ fn build(
         manifest_modules,
         codeowners,
         DerivedLayer::empty(),
+        lore_graph::ReconcileInput::empty(),
     )
 }
 

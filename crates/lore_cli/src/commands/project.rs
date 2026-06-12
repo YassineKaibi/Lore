@@ -144,7 +144,15 @@ pub fn build_graph(p: &Project, manifest_path: &Path) -> Built {
 
     let codeowners = discover_codeowners(manifest_path.parent().unwrap_or(Path::new(".")));
     Built {
-        graph: lore_graph::build(nodes, &manifest_modules, codeowners.as_ref(), derived),
+        // Reconciliation inputs arrive with the CLI wiring commit; until
+        // then §9.1 runs with its inputs withheld (D-066c) — no Contradicted.
+        graph: lore_graph::build(
+            nodes,
+            &manifest_modules,
+            codeowners.as_ref(),
+            derived,
+            lore_graph::ReconcileInput::empty(),
+        ),
         findings,
         unresolved_calls,
         ambiguous_derived_names,
