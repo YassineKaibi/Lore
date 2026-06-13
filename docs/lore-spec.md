@@ -359,6 +359,7 @@ Normative keys. An unknown key, missing required key, invalid value, tier/artifa
 | `[scanner] comment_token` | R | Line-comment token (§7.1). |
 | `[binder] wrappers` | O (bind+) | Descend-wrapper node types (§7.3, D-042). |
 | `[binder] sibling_skips` | O (bind+) | Preceding-sibling skip node types (D-050c). |
+| `[derive] value_functions` | O (derive) | Value-bound function node types (lambda/arrow/function-expression). The §8.2/D-062a attribution walk stops at one of these: a call inside a value-bound function has no honest enclosing derived function (D-074). |
 | `[derive] mutators.methods` | O (derive) | Method names that mutate a receiver state symbol (§8.3). |
 | `[derive] mutators.free_functions` | O (derive) | Free functions that mutate their first state-symbol argument (§8.3; e.g. Go `delete`). |
 | `[[derive.imports.strategy]]` | R (derive) | Ordered strategy stanzas: `kind` = `"relative"` \| `"root_relative"` \| `"package_dir"` \| `"manifest_prefix"` \| `"custom"` plus per-kind params (D-071). Tried in order; first resolution wins; no resolution -> drop and count (§8.2 rule 3). |
@@ -634,6 +635,7 @@ pub struct PackSpec {
     pub comment_token: String,           // line-comment token (§7.1)
     pub wrappers: Vec<String>,           // descend-wrapper node types (§7.3, D-042)
     pub sibling_skips: Vec<String>,      // preceding-sibling skips (D-050c)
+    pub value_functions: Vec<String>,    // value-bound fn node types (lambda/arrow), D-062a/D-074
     pub mutator_methods: Vec<String>,    // §8.3 receiver mutators
     pub mutator_free_functions: Vec<String>, // §8.3 first-arg mutators (Go delete)
     pub imports: Vec<ImportStrategy>,    // ordered; first resolution wins (D-071)
