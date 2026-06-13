@@ -74,6 +74,18 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Export the intent graph as Graphviz DOT (D-038)
+    Graph {
+        /// Emit Graphviz DOT (the only supported format in v1)
+        #[arg(long)]
+        dot: bool,
+        /// Restrict to a node's neighborhood (qname), e.g. Payment.ledger
+        #[arg(long, value_name = "QNAME")]
+        focus: Option<String>,
+        /// Neighborhood radius in edges around --focus (default 1)
+        #[arg(long, value_name = "N", requires = "focus")]
+        depth: Option<usize>,
+    },
 }
 
 fn main() {
@@ -116,6 +128,14 @@ fn run(cli: Cli) -> i32 {
         },
         Command::Stats { json } => match discover_manifest(&cli) {
             Some(path) => commands::stats::run(&path, json, cli.quiet),
+            None => 2,
+        },
+        Command::Graph {
+            dot,
+            ref focus,
+            depth,
+        } => match discover_manifest(&cli) {
+            Some(path) => commands::graph::run(&path, dot, focus.as_deref(), depth, cli.quiet),
             None => 2,
         },
     }
