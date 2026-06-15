@@ -298,6 +298,7 @@ name = "lore_cli"
 version = "0.2.0"
 dependencies = [
  "clap",
+ "globset",
  "lore_annotations",
  "lore_derive",
  "lore_graph",

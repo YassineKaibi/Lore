@@ -104,7 +104,7 @@ pub struct ScanResult {
 // @lore
 // purpose: "Scan, bind, and scope a set of source files into qnamed annotation blocks, per-file module assignments, and findings"
 // because: "The per-file module assignment is exposed so the CLI can build the derivation scope without re-implementing the scoping rules (D-061)"
-// unknown: "[modules] globs that fail to compile are dropped silently when matching; the manifest layer validates value types but not glob syntax"
+// because: "From T8 the pipeline is pack-driven (D-070): each file's pack supplies the comment token and binder, so one generic adapter scans Python, TypeScript, Rust, Go, and Java"
 pub fn scan(config: &ScanConfig, files: &[SourceFile], packs: &[ActivePack]) -> ScanResult {
     let globs = scoping::CompiledGlobs::compile(&config.modules);
     let mut blocks = Vec::new();

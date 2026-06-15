@@ -120,6 +120,7 @@ pub struct DeriveResult {
 // @lore
 // purpose: "Derive nodes and confidence-labeled edges from the files in derivation scope"
 // because: "Extraction is per-file and cacheable by content; everything cross-file is resolved fresh each run so the cache can never serve a stale edge (D-064)"
+// because: "From T8 derivation is pack-driven (D-070): each pack supplies its queries, import strategies, and mutators, so one generic extractor serves every language"
 pub fn derive(
     config: &DeriveConfig,
     packs: &[DerivePack],

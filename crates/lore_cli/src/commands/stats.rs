@@ -41,7 +41,6 @@ impl KindRow {
 // name: stats
 // purpose: "Coverage counts over the graph: nodes by kind and origin, declared-intent share per kind, edges by layer, claims by status, derivation drop counters"
 // because: "The drop counters are the honesty surface for the derived layer: every guess lore refused to make is visible here, not silently absent (G-7)"
-// triggers: Graph.build
 pub fn run(manifest_path: &Path, json: bool, quiet: bool) -> i32 {
     let p = match project::load(manifest_path) {
         Ok(p) => p,

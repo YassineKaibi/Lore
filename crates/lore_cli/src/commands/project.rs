@@ -122,6 +122,11 @@ pub struct Built {
 /// over the D-061 scope, and reconciliation gets its inputs as data
 /// (D-066). Only lint pays the git cost: `check_stale` gathers the §9.2
 /// blame metadata (D-068c) and is false for every other command.
+
+// @lore
+// purpose: "Run the scan -> derive -> reconcile pipeline once and return the graph plus the findings and drop counters every command surfaces"
+// because: "lint, ask, stats, and graph all need the same built graph; one pipeline here keeps a single place for the D-066 reconciliation inputs"
+// triggers: Annotations.scan, Intent.parse_intent, Graph.build
 pub fn build_graph(p: &Project, manifest_path: &Path, check_stale: bool, quiet: bool) -> Built {
     let config = ScanConfig {
         modules: p.manifest.modules.clone(),

@@ -16,7 +16,6 @@ use crate::commands::project;
 // name: graph
 // purpose: "Emit the intent graph as Graphviz DOT, optionally a depth-bounded neighborhood around one node"
 // because: "DOT is the lingua franca for graph rendering; --focus/--depth keep large graphs legible (D-038)"
-// triggers: Graph.build
 pub fn run(
     manifest_path: &Path,
     dot: bool,
