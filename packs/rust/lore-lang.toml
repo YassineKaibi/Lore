@@ -1,11 +1,13 @@
 # Rust language pack (spec §8.6, §7.4, D-050). Migrated from the pre-T8
-# Lang::Rust scanner+binder row (D-070h). Tier "bind": Rust gains derivation
-# (with the custom rust_use_paths import strategy, D-071c) at T8 step 6.
+# Lang::Rust scanner+binder row (D-070h). Derive tier (D-071c/D-078): the
+# custom `rust_use_paths` strategy resolves `use crate::`/`self::`/`super::`
+# paths through the mod-declaration tree, which no path-shaped builtin can
+# express.
 
 [pack]
 name   = "rust"
 format = 1
-tier   = "bind"
+tier   = "derive"
 
 [grammar]
 source = "builtin"
@@ -19,3 +21,15 @@ comment_token = "//"
 # Rust attributes precede the declaration as siblings, not wrappers (D-050c):
 # the binder advances past them and binds the declaration that follows.
 sibling_skips = ["attribute_item"]
+
+[derive]
+# §8.3 mutators on a state symbol bound by value (`Vec`/map/set methods, or a
+# `&mut` borrow — the borrow case stays out of v1, G-7).
+[derive.mutators]
+methods = ["push", "insert", "remove", "clear", "extend", "sort"]
+
+# §8.2 import resolution (D-071c/D-078): the named custom strategy walks the
+# crate module tree built from `mod` declarations.
+[[derive.imports.strategy]]
+kind = "custom"
+name = "rust_use_paths"

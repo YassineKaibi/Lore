@@ -64,6 +64,7 @@ struct DeriveCaps {
     t_aug: Option<u32>,
     t_recv: Option<u32>,
     t_call_fn: Option<u32>,
+    mod_decl: Option<u32>,
     mod_name: Option<u32>,
     mod_inline: Option<u32>,
 }
@@ -108,6 +109,7 @@ impl CompiledPack {
             t_aug: idx(&derive, "touch.aug_assign_lhs"),
             t_recv: idx(&derive, "touch.receiver"),
             t_call_fn: idx(&derive, "touch.call_function"),
+            mod_decl: idx(&derive, "module.decl"),
             mod_name: idx(&derive, "module.name"),
             mod_inline: idx(&derive, "module.inline"),
         };
@@ -381,9 +383,10 @@ fn collect_imports<'t>(
     out.into_iter().map(|(_, f)| f).collect()
 }
 
-/// Module declarations for the `rust_use_paths` crate tree (D-078): one
-/// `ModFact` per `@module.name`, `inline` iff the pattern also captured a
-/// `@module.inline` body. Document order (irrelevant: the tree keys by name).
+/// Module declarations for the `rust_use_paths` crate tree (D-078). The name
+/// (`@module.decl` + `@module.name`) and the inline marker (`@module.inline`,
+/// the body-bearing `mod x { }`) come from separate query patterns, so both
+/// key on the shared `mod_item` node id.
 fn collect_mods<'t>(
     cp: &CompiledPack,
     matches: &[Match<'t>],
@@ -391,13 +394,16 @@ fn collect_mods<'t>(
 ) -> Vec<ModFact> {
     let mut by_node: HashMap<usize, (String, bool)> = HashMap::new();
     for m in matches {
-        let Some(name) = m.cap(cp.d.mod_name) else {
-            continue;
-        };
-        let entry = by_node
-            .entry(name.id())
-            .or_insert_with(|| (text(name).to_string(), false));
-        if m.cap(cp.d.mod_inline).is_some() {
+        if let (Some(decl), Some(name)) = (m.cap(cp.d.mod_decl), m.cap(cp.d.mod_name)) {
+            by_node
+                .entry(decl.id())
+                .or_insert_with(|| (text(name).to_string(), false));
+        }
+    }
+    for m in matches {
+        if let Some(inl) = m.cap(cp.d.mod_inline)
+            && let Some(entry) = by_node.get_mut(&inl.id())
+        {
             entry.1 = true;
         }
     }

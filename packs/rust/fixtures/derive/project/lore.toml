@@ -1,0 +1,7 @@
+[project]
+languages = ["rust"]
+roots = ["src"]
+
+[modules]
+"src/helpers.rs" = "crate.helpers"
+"src/lib.rs" = "crate"
