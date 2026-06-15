@@ -7,6 +7,8 @@ use lore_annotations::*;
 use lore_intent::QName;
 use std::path::PathBuf;
 
+mod common;
+
 fn scan_rs(src: &str) -> ScanResult {
     let config = ScanConfig {
         modules: vec![ModuleGlob {
@@ -20,6 +22,7 @@ fn scan_rs(src: &str) -> ScanResult {
             path: PathBuf::from("src/lib.rs"),
             text: src.to_string(),
         }],
+        &common::packs(),
     )
 }
 

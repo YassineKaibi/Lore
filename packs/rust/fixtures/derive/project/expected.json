@@ -1,0 +1,48 @@
+{
+  "ambiguous_names": 0,
+  "edges": [
+    {
+      "confidence": "Exact",
+      "from": "crate.driver",
+      "kind": "Calls",
+      "to": "crate.local"
+    },
+    {
+      "confidence": "Resolved",
+      "from": "crate.driver",
+      "kind": "Calls",
+      "to": "crate.helpers.run"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "crate.driver",
+      "kind": "Affects",
+      "to": "crate.COUNTER"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "crate.show",
+      "kind": "Reads",
+      "to": "crate.COUNTER"
+    }
+  ],
+  "nodes": [
+    {
+      "kind": "Function",
+      "qname": "crate.helpers.run"
+    },
+    {
+      "kind": "Function",
+      "qname": "crate.driver"
+    },
+    {
+      "kind": "Function",
+      "qname": "crate.local"
+    },
+    {
+      "kind": "Function",
+      "qname": "crate.show"
+    }
+  ],
+  "unresolved_calls": 1
+}

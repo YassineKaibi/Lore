@@ -1,0 +1,20 @@
+{
+  "blocks": [
+    {
+      "block_span": {
+        "end": 7,
+        "start": 6
+      },
+      "file": "Main.java",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.widget",
+      "subject": "widget",
+      "subject_span": {
+        "end": 10,
+        "start": 8
+      }
+    }
+  ],
+  "findings": []
+}

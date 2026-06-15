@@ -2,23 +2,26 @@
 //! source walk over the manifest's active languages. Paths stay relative to
 //! the manifest dir (they feed the §7.5 module globs).
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use lore_annotations::{Lang, ScanConfig, SourceFile};
+use lore_annotations::{ActivePack, ScanConfig, SourceFile};
 use lore_cli::manifest::{self, Manifest};
+use lore_cli::packs;
 use lore_intent::{Finding, IntentNode, Origin, Span, Spanned};
 
 /// Directories never scanned (build output, VCS, caches, dot-dirs).
 const SKIP_DIRS: [&str; 4] = [".git", "target", "node_modules", ".lore-cache"];
 
-/// Languages with a §7.4 row activated: Python+TypeScript at T1, Rust at T3
-/// (D-050, dogfooding). Go and Java arrive at T8.
-const ACTIVE_LANGUAGES: [&str; 3] = ["python", "typescript", "rust"];
-
 pub struct Project {
     pub manifest: Manifest,
     pub sources: Vec<SourceFile>,
+    /// The packs activated for this project (D-070): scanning/binding adapters
+    /// for the languages named in `[project] languages`.
+    pub packs: Vec<ActivePack>,
+    /// The derive-tier packs (§8.6.2): `PackSpec` + grammar handle, passed to
+    /// lore_derive as data (D-070d). Derivation scope is exactly the files
+    /// these claim — the pack tier drives it, not a hardcoded extension list.
+    pub derive_packs: Vec<lore_derive::DerivePack>,
 }
 
 /// Load manifest + sources, reporting manifest problems on stderr.
@@ -45,18 +48,45 @@ pub fn load(manifest_path: &Path) -> Result<Project, i32> {
         }
     };
 
-    let mut active = BTreeSet::new();
+    // Validate the embedded builtin packs and activate those named in
+    // [project] languages (D-070d). A builtin pack should never fail
+    // validation (the conformance harness enforces that in CI), but if one
+    // does we report it and drop the language rather than guess.
+    let (loaded, pack_findings) = packs::load_all(&packs::builtin::sources());
+    for f in &pack_findings {
+        eprintln!(
+            "{} {}:{}  {}",
+            f.code,
+            f.span.file.display(),
+            f.span.line,
+            f.message
+        );
+    }
+    let mut active_packs = Vec::new();
+    let mut derive_packs = Vec::new();
     for lang in &m.languages {
-        if ACTIVE_LANGUAGES.contains(&lang.as_str()) {
-            active.insert(lang.as_str());
-        } else {
-            eprintln!("note: language \"{lang}\" has no scanner yet; skipping its files");
+        match loaded.iter().find(|p| p.spec.name == *lang) {
+            Some(p) => {
+                match packs::activate(p) {
+                    Ok(ap) => active_packs.push(ap),
+                    Err(f) => eprintln!("{} {}  {}", f.code, f.span.file.display(), f.message),
+                }
+                // Derive-tier packs also feed the derived layer (D-070d): pass
+                // the spec as data plus the grammar handle as a separate arg.
+                if let (lore_intent::Tier::Derive, Some(grammar)) = (p.spec.tier, &p.grammar) {
+                    derive_packs.push(lore_derive::DerivePack {
+                        spec: p.spec.clone(),
+                        grammar: grammar.clone(),
+                    });
+                }
+            }
+            None => eprintln!("note: language \"{lang}\" has no pack yet; skipping its files"),
         }
     }
 
     let root = manifest_path.parent().unwrap_or(Path::new("."));
     let mut paths = Vec::new();
-    collect_sources(root, root, &active, &mut paths);
+    collect_sources(root, root, &active_packs, &mut paths);
     paths.sort();
 
     let sources: Vec<SourceFile> = paths
@@ -71,6 +101,8 @@ pub fn load(manifest_path: &Path) -> Result<Project, i32> {
     Ok(Project {
         manifest: m,
         sources,
+        packs: active_packs,
+        derive_packs,
     })
 }
 
@@ -90,11 +122,16 @@ pub struct Built {
 /// over the D-061 scope, and reconciliation gets its inputs as data
 /// (D-066). Only lint pays the git cost: `check_stale` gathers the §9.2
 /// blame metadata (D-068c) and is false for every other command.
+
+// @lore
+// purpose: "Run the scan -> derive -> reconcile pipeline once and return the graph plus the findings and drop counters every command surfaces"
+// because: "lint, ask, stats, and graph all need the same built graph; one pipeline here keeps a single place for the D-066 reconciliation inputs"
+// triggers: Annotations.scan, Intent.parse_intent, Graph.build
 pub fn build_graph(p: &Project, manifest_path: &Path, check_stale: bool, quiet: bool) -> Built {
     let config = ScanConfig {
         modules: p.manifest.modules.clone(),
     };
-    let result = lore_annotations::scan(&config, &p.sources);
+    let result = lore_annotations::scan(&config, &p.sources, &p.packs);
 
     let (derived, unresolved_calls, ambiguous_derived_names) =
         derive_layer(p, manifest_path, &result);
@@ -185,11 +222,61 @@ pub fn build_graph(p: &Project, manifest_path: &Path, check_stale: bool, quiet: 
     }
 }
 
-/// Languages with a §8 derived layer at T6: Python and TypeScript (D-014).
-/// Go, Java, Rust derive at T8 — until then their files stay outside the
-/// derivation scope and claims about them are honestly Unverifiable.
-fn derived_lang(lang: Lang) -> bool {
-    matches!(lang, Lang::Python | Lang::TypeScript | Lang::Tsx)
+/// Collect the language-manifest texts the derive packs' `manifest_prefix`
+/// strategies name (e.g. Go's `go.mod`), keyed by project-relative path
+/// (§8.2 rule 2, D-071). The engine never reads the filesystem (D-058), so the
+/// CLI gathers these; empty when no pack configures the strategy.
+fn collect_manifests(root: &Path, packs: &[lore_derive::DerivePack]) -> Vec<(PathBuf, String)> {
+    use lore_intent::ImportStrategy;
+    let mut names: Vec<&str> = packs
+        .iter()
+        .flat_map(|p| &p.spec.imports)
+        .filter_map(|s| match s {
+            ImportStrategy::ManifestPrefix { manifest_file, .. } => Some(manifest_file.as_str()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    if names.is_empty() {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                if !(SKIP_DIRS.contains(&name.as_ref())
+                    || name.starts_with('.')
+                    || is_pack_fixtures(&dir, &name))
+                {
+                    stack.push(path);
+                }
+            } else if names.contains(&name.as_ref())
+                && let Ok(text) = std::fs::read_to_string(&path)
+                && let Ok(rel) = path.strip_prefix(root)
+            {
+                found.push((rel.to_path_buf(), text));
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Whether a derive-tier pack claims `path` (§8.6.2): derivation scope is the
+/// union of every derive pack's claimed extensions (D-070b — tier drives it).
+fn derive_capable(packs: &[lore_derive::DerivePack], path: &Path) -> bool {
+    let name = path.to_string_lossy();
+    packs
+        .iter()
+        .any(|p| p.spec.extensions.iter().any(|e| name.ends_with(e.as_str())))
 }
 
 /// Run lore_derive over the derivation scope (D-061: files of supported
@@ -208,7 +295,7 @@ fn derive_layer(
     let units: Vec<lore_derive::SourceUnit> = p
         .sources
         .iter()
-        .filter(|s| Lang::from_path(&s.path).is_some_and(derived_lang))
+        .filter(|s| derive_capable(&p.derive_packs, &s.path))
         .filter_map(|s| {
             Some(lore_derive::SourceUnit {
                 path: s.path.clone(),
@@ -235,16 +322,13 @@ fn derive_layer(
         })
         .collect();
 
+    let root = manifest_path.parent().unwrap_or(Path::new("."));
     let config = lore_derive::DeriveConfig {
         roots: p.manifest.roots.clone(),
-        cache_dir: Some(
-            manifest_path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join(".lore-cache"),
-        ),
+        cache_dir: Some(root.join(".lore-cache")),
+        manifests: collect_manifests(root, &p.derive_packs),
     };
-    let result = lore_derive::derive(&config, &units, &states);
+    let result = lore_derive::derive(&config, &p.derive_packs, &units, &states);
 
     let edges = result.edges.into_iter().map(graph_edge).collect();
     let layer = lore_graph::DerivedLayer {
@@ -291,7 +375,14 @@ fn discover_codeowners(root: &Path) -> Option<lore_graph::Codeowners> {
         })
 }
 
-fn collect_sources(root: &Path, dir: &Path, active: &BTreeSet<&str>, out: &mut Vec<PathBuf>) {
+/// A language pack's `fixtures/` directory (a `fixtures` dir beside a
+/// `lore-lang.toml`) holds deliberately-malformed conformance inputs, not
+/// project source, so the walk skips it (§8.6.4, D-075).
+fn is_pack_fixtures(parent: &Path, name: &str) -> bool {
+    name == "fixtures" && parent.join("lore-lang.toml").is_file()
+}
+
+fn collect_sources(root: &Path, dir: &Path, packs: &[ActivePack], out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -300,23 +391,19 @@ fn collect_sources(root: &Path, dir: &Path, active: &BTreeSet<&str>, out: &mut V
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if path.is_dir() {
-            if SKIP_DIRS.contains(&name.as_ref()) || name.starts_with('.') {
+            if SKIP_DIRS.contains(&name.as_ref())
+                || name.starts_with('.')
+                || is_pack_fixtures(dir, &name)
+            {
                 continue;
             }
-            collect_sources(root, &path, active, out);
-        } else if let Some(lang) = Lang::from_path(&path) {
-            let lang_name = match lang {
-                Lang::Python => "python",
-                Lang::TypeScript | Lang::Tsx => "typescript",
-                Lang::Rust => "rust",
-            };
-            if active.contains(lang_name) {
-                out.push(
-                    path.strip_prefix(root)
-                        .expect("walk stays under root")
-                        .to_path_buf(),
-                );
-            }
+            collect_sources(root, &path, packs, out);
+        } else if packs.iter().any(|p| p.claims(&path)) {
+            out.push(
+                path.strip_prefix(root)
+                    .expect("walk stays under root")
+                    .to_path_buf(),
+            );
         }
     }
 }

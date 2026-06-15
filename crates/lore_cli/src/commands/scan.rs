@@ -19,7 +19,7 @@ pub fn run(manifest_path: &Path, json: bool, quiet: bool, no_color: bool) -> i32
     let config = ScanConfig {
         modules: p.manifest.modules.clone(),
     };
-    let result = lore_annotations::scan(&config, &p.sources);
+    let result = lore_annotations::scan(&config, &p.sources, &p.packs);
 
     if json {
         println!(

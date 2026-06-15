@@ -1,0 +1,64 @@
+{
+  "ambiguous_names": 0,
+  "edges": [
+    {
+      "confidence": "Exact",
+      "from": "app.Driver",
+      "kind": "Calls",
+      "to": "app.local"
+    },
+    {
+      "confidence": "Resolved",
+      "from": "app.Driver",
+      "kind": "Calls",
+      "to": "app.Greet"
+    },
+    {
+      "confidence": "Resolved",
+      "from": "app.Driver",
+      "kind": "Calls",
+      "to": "helpers.Hello"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "app.Driver",
+      "kind": "Affects",
+      "to": "app.counter"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "app.Driver",
+      "kind": "Reads",
+      "to": "app.counter"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "app.Show",
+      "kind": "Reads",
+      "to": "app.counter"
+    }
+  ],
+  "nodes": [
+    {
+      "kind": "Function",
+      "qname": "app.Greet"
+    },
+    {
+      "kind": "Function",
+      "qname": "helpers.Hello"
+    },
+    {
+      "kind": "Function",
+      "qname": "app.Driver"
+    },
+    {
+      "kind": "Function",
+      "qname": "app.local"
+    },
+    {
+      "kind": "Function",
+      "qname": "app.Show"
+    }
+  ],
+  "unresolved_calls": 2
+}

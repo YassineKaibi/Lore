@@ -1,0 +1,54 @@
+{
+  "ambiguous_names": 0,
+  "edges": [
+    {
+      "confidence": "Heuristic",
+      "from": "app.bump",
+      "kind": "Affects",
+      "to": "app.counter"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "app.bump",
+      "kind": "Reads",
+      "to": "app.counter"
+    },
+    {
+      "confidence": "Heuristic",
+      "from": "app.show",
+      "kind": "Reads",
+      "to": "app.counter"
+    },
+    {
+      "confidence": "Exact",
+      "from": "app.driver",
+      "kind": "Calls",
+      "to": "app.bump"
+    },
+    {
+      "confidence": "Resolved",
+      "from": "app.driver",
+      "kind": "Calls",
+      "to": "helpers.run"
+    }
+  ],
+  "nodes": [
+    {
+      "kind": "Function",
+      "qname": "app.bump"
+    },
+    {
+      "kind": "Function",
+      "qname": "app.show"
+    },
+    {
+      "kind": "Function",
+      "qname": "app.driver"
+    },
+    {
+      "kind": "Function",
+      "qname": "helpers.run"
+    }
+  ],
+  "unresolved_calls": 1
+}

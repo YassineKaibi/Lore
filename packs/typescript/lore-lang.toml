@@ -1,0 +1,40 @@
+# TypeScript/JS language pack (spec §8.6, §7.4). Covers JS (D-014). Migrated
+# from the pre-T8 Lang::TypeScript row (D-070h). Derive tier (D-070/D-071).
+#
+# The pack uses the TypeScript grammar for all its extensions; the TSX-grammar
+# variant for .tsx/.jsx is a follow-up (no fixture exercises JSX syntax).
+
+[pack]
+name   = "typescript"
+format = 1
+tier   = "derive"
+
+[grammar]
+source = "builtin"
+name   = "tree_sitter_typescript"
+
+[scanner]
+extensions    = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+comment_token = "//"
+
+[binder]
+wrappers = ["export_statement"]
+
+[derive]
+# Value-bound functions: a call inside an arrow/function-expression has no
+# enclosing derived function (D-062a/D-074).
+value_functions = ["arrow_function", "function_expression", "generator_function"]
+
+[derive.mutators]
+# §8.3 array/map/set mutators.
+methods = [
+  "push", "pop", "shift", "unshift", "splice", "sort",
+  "reverse", "fill", "set", "delete", "clear", "add",
+]
+
+# §8.2 import resolution (D-071c): relative `./`/`../` specifiers; default
+# imports stay dropped (derive.scm does not capture them — G-7).
+[[derive.imports.strategy]]
+kind        = "relative"
+extensions  = [".ts", ".tsx", ".js"]
+index_files = ["index.ts"]

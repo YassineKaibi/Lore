@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use lore_annotations::{Lang, scan_source};
+use lore_annotations::scan_source;
 use lore_intent::parse_intent;
 
 #[test]
@@ -13,7 +13,7 @@ fn every_spec_python_example_block_parses() {
     let mut total_blocks = 0;
     for (i, fence) in python_fences(&spec).iter().enumerate() {
         let name = format!("spec-example-{i}.py");
-        let (blocks, findings) = scan_source(Path::new(&name), fence, Lang::Python);
+        let (blocks, findings) = scan_source(Path::new(&name), fence, "#");
         assert!(
             findings.is_empty(),
             "scan findings in fence {i}: {findings:?}"

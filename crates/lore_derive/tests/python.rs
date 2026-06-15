@@ -5,10 +5,13 @@
 use lore_derive::{DeriveConfig, DeriveResult, SourceUnit, StateSymbol, derive};
 use lore_intent::QName;
 
+mod common;
+
 fn cfg() -> DeriveConfig {
     DeriveConfig {
         roots: vec!["src".into()],
         cache_dir: None,
+        manifests: Vec::new(),
     }
 }
 
@@ -64,7 +67,7 @@ fn unresolvable_calls_are_dropped_and_counted_never_guessed() {
         "App",
         "def f():\n    print(\"x\")\n    helper.run()\n    a.b.c()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 3);
 }
@@ -78,7 +81,7 @@ fn calls_without_an_honest_attribution_drop() {
         "App",
         "def g():\n    pass\n\ng()\n\nclass C:\n    x = g()\n\nh = lambda: g()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 3);
 }
@@ -92,7 +95,7 @@ fn colliding_derived_qnames_are_excluded_and_counted_not_guessed() {
         "App",
         "class A:\n    def __init__(self):\n        pass\n\nclass B:\n    def __init__(self):\n        pass\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         nodes(&r),
         [("App.A".to_string(), "type"), ("App.B".to_string(), "type")]
@@ -107,7 +110,7 @@ fn constructor_calls_resolve_to_a_type_and_drop() {
         "App",
         "class Foo:\n    pass\n\ndef make():\n    return Foo()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 1);
 }
@@ -120,7 +123,7 @@ fn imports_that_leave_derivation_scope_drop() {
         "App",
         "from requests import get\n\ndef fetch():\n    get(\"u\")\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 1);
 }
@@ -133,7 +136,7 @@ fn method_calls_without_a_local_construction_drop() {
         "App",
         "class Store:\n    def save(self):\n        pass\n\ndef other(s):\n    s.save()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 1);
 }
@@ -147,7 +150,7 @@ fn declarations_become_function_and_type_nodes_assignments_do_not() {
         "App",
         "ledger = []\n\ndef f():\n    pass\n\nclass C:\n    def m(self):\n        pass\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         nodes(&r),
         [
@@ -171,7 +174,7 @@ fn same_file_calls_are_exact_including_recursion() {
         "App",
         "def helper():\n    pass\n\ndef main():\n    helper()\n    main()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         edges(&r),
         [
@@ -189,7 +192,7 @@ fn nested_functions_derive_and_attribute_their_own_calls() {
         "App",
         "def outer():\n    def inner():\n        outer()\n    inner()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         edges(&r),
         [
@@ -209,7 +212,7 @@ fn from_import_calls_resolve_across_files() {
             "from pay.svc import charge\n\ndef signup():\n    charge()\n",
         ),
     ];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         edges(&r),
         [e("User.signup", "Payment.charge", "Calls", "Resolved")]
@@ -227,7 +230,7 @@ fn aliased_imports_resolve_one_level_deep_only() {
             "import pay.svc as svc\nimport pay.svc\nfrom pay.svc import charge as pay_up\n\ndef a():\n    svc.charge()\n\ndef b():\n    pay_up()\n\ndef c():\n    pay.svc.charge()\n",
         ),
     ];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         edges(&r),
         [
@@ -246,7 +249,7 @@ fn method_call_on_a_locally_constructed_instance_is_exact() {
         "App",
         "class Store:\n    def save(self):\n        pass\n\ndef run():\n    s = Store()\n    s.save()\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), [e("App.run", "App.save", "Calls", "Exact")]);
     // the Store() construction itself resolves to a Type: dropped, counted
     assert_eq!(r.unresolved_calls, 1);
@@ -265,7 +268,7 @@ fn touches_classify_writes_and_reads_and_dedupe_per_function() {
         state("App.ledger", "ledger", "src/m.py", "App"),
         state("App.balances", "balances", "src/m.py", "App"),
     ];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(
         edges(&r),
         [
@@ -289,7 +292,7 @@ fn assignment_augmented_assignment_and_mutators_are_writes_the_rest_reads() {
         state("App.count", "count", "src/m.py", "App"),
         state("App.items", "items", "src/m.py", "App"),
     ];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(
         edges(&r),
         [
@@ -306,7 +309,7 @@ fn module_level_touches_produce_no_edges() {
     // function, nothing to attribute (D-062d)
     let files = [unit("src/m.py", "App", "ledger = []\nledger.append(1)\n")];
     let states = [state("App.ledger", "ledger", "src/m.py", "App")];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(edges(&r), []);
 }
 
@@ -340,7 +343,7 @@ fn cross_module_touches_need_an_import_that_resolves_to_the_defining_file() {
         "src/pay/svc.py",
         "Payment",
     )];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(
         edges(&r),
         [e("User.audit", "Payment.ledger", "Affects", "Heuristic")]
@@ -363,7 +366,7 @@ fn whole_import_alias_attribute_touches_resolve() {
         "src/pay/svc.py",
         "Payment",
     )];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(
         edges(&r),
         [
@@ -385,6 +388,6 @@ fn import_statements_themselves_are_not_occurrences() {
         "src/pay/svc.py",
         "Payment",
     )];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(edges(&r), []);
 }

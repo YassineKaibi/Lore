@@ -1,0 +1,12 @@
+{
+  "blocks": [],
+  "findings": [
+    {
+      "code": "E0102",
+      "file": "main.rs",
+      "line": 1,
+      "message": "this @lore block is not followed by a bindable declaration (found use_declaration); move it directly above a function, class, type, or assignment",
+      "severity": "error"
+    }
+  ]
+}

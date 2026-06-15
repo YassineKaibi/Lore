@@ -16,7 +16,6 @@ use crate::output;
 // purpose: "Answer one intent-graph query with witness chains, exit 2 on a bad question, exit 0 on any honest answer"
 // because: "Graph findings never fail ask (D-053b): lint owns the CI surface, ask answers questions even on a project with findings"
 // because: "ask never gathers staleness metadata: blaming the repo per question would break the latency budget (D-068c)"
-// triggers: Graph.build
 pub fn run(
     manifest_path: &Path,
     query_text: &str,

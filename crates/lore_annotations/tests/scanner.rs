@@ -1,9 +1,9 @@
-use lore_annotations::{Lang, RawBlock, scan_source};
+use lore_annotations::{RawBlock, scan_source};
 use lore_intent::{Finding, Kind};
 use std::path::Path;
 
 fn scan_py(src: &str) -> (Vec<RawBlock>, Vec<Finding>) {
-    scan_source(Path::new("f.py"), src, Lang::Python)
+    scan_source(Path::new("f.py"), src, "#")
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn typescript_comment_token() {
     let (blocks, _) = scan_source(
         Path::new("f.ts"),
         "// @lore\n// kind: type\ntype A = string;\n",
-        Lang::TypeScript,
+        "//",
     );
     assert_eq!(blocks[0].kind.as_ref().unwrap().value, Kind::Type);
 }

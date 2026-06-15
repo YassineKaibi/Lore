@@ -1,0 +1,6 @@
+[project]
+languages = ["typescript"]
+
+[modules]
+"src/app.ts" = "app"
+"src/helpers.ts" = "helpers"

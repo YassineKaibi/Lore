@@ -1,0 +1,44 @@
+# Java language pack (spec §8.6, §7.4, D-070/D-071). Derive tier.
+#
+# Import resolution is `root_relative` only (D-071c): Java's qualified imports
+# (`import a.b.C`) are dotted paths under [project] roots, and the implicit
+# binding name is the path tail (D-076 `whole_alias = "last_segment"`). The
+# kickoff also named `package_dir`, but Java same-package references are
+# class-qualified (`C.method()`); when `C` is imported they already resolve via
+# `root_relative`, and resolving an *un-imported* same-package class would need
+# a distinct mechanic beyond D-077's bare-callee rule -- so v1 configures only
+# `root_relative` and an un-imported same-package reference drops and is counted
+# (G-7: never configure an inert strategy, never guess).
+
+[pack]
+name   = "java"
+format = 1
+tier   = "derive"
+
+[grammar]
+source = "builtin"
+name   = "tree_sitter_java"
+
+[scanner]
+extensions    = [".java"]
+comment_token = "//"
+
+[binder]
+# §7.4 wrapper/skip column (D-042/D-050c): annotations preceding a declaration.
+# The official tree-sitter-java grammar nests them inside the declaration's
+# `modifiers`, so this list is a belt-and-braces realization of the §7.4 row;
+# the bind fixture proves an annotated declaration binds.
+sibling_skips = ["marker_annotation", "annotation"]
+
+[derive]
+whole_alias = "last_segment"
+
+# §8.3 collection mutators (write when called on a state symbol).
+[derive.mutators]
+methods = ["add", "addAll", "put", "putAll", "remove", "clear", "set", "sort"]
+
+# §8.2 import resolution: qualified single-type imports as dotted paths.
+[[derive.imports.strategy]]
+kind       = "root_relative"
+separator  = "."
+extensions = [".java"]

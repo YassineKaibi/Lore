@@ -1,0 +1,20 @@
+{
+  "blocks": [
+    {
+      "block_span": {
+        "end": 8,
+        "start": 7
+      },
+      "file": "main.go",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Widget",
+      "subject": "Widget",
+      "subject_span": {
+        "end": 11,
+        "start": 9
+      }
+    }
+  ],
+  "findings": []
+}

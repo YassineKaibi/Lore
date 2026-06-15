@@ -57,7 +57,7 @@ fn generate(root: &Path) {
     }
 }
 
-fn lint(root: &Path) -> Duration {
+fn run_lint(root: &Path) -> Duration {
     let started = Instant::now();
     let out = Command::new(env!("CARGO_BIN_EXE_lore"))
         .args(["lint", "--no-stale", "--no-color", "--quiet"])
@@ -83,13 +83,13 @@ fn full_pipeline_on_a_20k_loc_python_tree_meets_the_t6_budget() {
     let tmp = tempfile::tempdir().unwrap();
     generate(tmp.path());
 
-    let cold = lint(tmp.path());
+    let cold = run_lint(tmp.path());
     assert!(
         cold < Duration::from_secs(10),
         "cold run took {cold:?}, over the 10s budget"
     );
 
-    let warm = lint(tmp.path());
+    let warm = run_lint(tmp.path());
     assert!(
         warm < Duration::from_secs(1),
         "warm run took {warm:?}, over the 1s budget"

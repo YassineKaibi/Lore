@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::facts::FileFacts;
-use crate::lang::Language;
 use crate::{SourceUnit, StateSymbol};
 
 /// Bump on any change to FileFacts or extraction semantics: a stale shape
@@ -58,11 +57,12 @@ impl Cache {
     }
 }
 
-/// Everything extraction reads (D-064): format version, language variant,
-/// path, content, the file's module, the import roots, and the state-symbol
-/// descriptors (extraction pre-matches occurrences against them).
+/// Everything extraction reads (D-064): format version, pack identity (name +
+/// query content hash, D-070i), path, content, the file's module, the import
+/// roots, and the state-symbol descriptors (extraction pre-matches occurrences
+/// against them).
 pub(crate) fn key(
-    language: Language,
+    pack_id: &str,
     file: &SourceUnit,
     roots: &[String],
     states: &[StateSymbol],
@@ -70,7 +70,7 @@ pub(crate) fn key(
     use std::fmt::Write;
     let mut key = format!(
         "v{FORMAT_VERSION}\x1f{}\x1f{}\x1f{}\x1f{}\x1f",
-        language.name(),
+        pack_id,
         file.path.display(),
         file.module,
         roots.join("\x1e"),

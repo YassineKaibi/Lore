@@ -1,0 +1,80 @@
+{
+  "blocks": [
+    {
+      "block_span": {
+        "end": 2,
+        "start": 1
+      },
+      "file": "Subjects.java",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Subjects",
+      "subject": "Subjects",
+      "subject_span": {
+        "end": 17,
+        "start": 3
+      }
+    },
+    {
+      "block_span": {
+        "end": 6,
+        "start": 4
+      },
+      "file": "Subjects.java",
+      "kind": "State",
+      "module": "app",
+      "qname": "app.gamma",
+      "subject": "gamma",
+      "subject_span": {
+        "end": 7,
+        "start": 7
+      }
+    },
+    {
+      "block_span": {
+        "end": 10,
+        "start": 9
+      },
+      "file": "Subjects.java",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.alpha",
+      "subject": "alpha",
+      "subject_span": {
+        "end": 11,
+        "start": 11
+      }
+    },
+    {
+      "block_span": {
+        "end": 14,
+        "start": 13
+      },
+      "file": "Subjects.java",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.beta",
+      "subject": "beta",
+      "subject_span": {
+        "end": 16,
+        "start": 15
+      }
+    },
+    {
+      "block_span": {
+        "end": 20,
+        "start": 19
+      },
+      "file": "Subjects.java",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Helper",
+      "subject": "Helper",
+      "subject_span": {
+        "end": 21,
+        "start": 21
+      }
+    }
+  ],
+  "findings": []
+}

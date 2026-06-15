@@ -1,0 +1,5 @@
+[project]
+languages = ["typescript"]
+
+[modules]
+"*.ts" = "app"

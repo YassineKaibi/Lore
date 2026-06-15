@@ -5,11 +5,16 @@ edition.workspace = true
 
 [dependencies]
 lore_intent.workspace = true
+# tree-sitter core (Language/Query/Parser); the generic binder needs it. The
+# grammar crates are dev-deps only — packs supply grammars to the CLI (D-070d).
 tree-sitter.workspace = true
+streaming-iterator.workspace = true
+globset.workspace = true
+
+[dev-dependencies]
 tree-sitter-python.workspace = true
 tree-sitter-typescript.workspace = true
 tree-sitter-rust.workspace = true
-globset.workspace = true
 
 [lints]
 workspace = true

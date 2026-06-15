@@ -1,13 +1,34 @@
 //! `@lore` annotation scanning, binding, and module scoping (spec §7).
 
 mod binder;
-mod lang;
 mod scanner;
 mod scoping;
 
-pub use binder::bind;
-pub use lang::Lang;
+pub use binder::{Binder, bind_scan_tier};
 pub use scanner::scan_source;
+
+/// A language pack activated for scanning/binding (D-070d): the extensions it
+/// claims, its comment token, and a compiled `Binder` (None at the `scan`
+/// tier — no grammar). The CLI builds these from validated packs and passes
+/// them to `scan`; `lore_annotations` never reads pack files or the grammar
+/// registry itself.
+pub struct ActivePack {
+    pub extensions: Vec<String>,
+    pub comment_token: String,
+    pub binder: Option<Binder>,
+}
+
+impl ActivePack {
+    pub fn claims(&self, path: &std::path::Path) -> bool {
+        match path.extension().and_then(|e| e.to_str()) {
+            Some(ext) => {
+                let dotted = format!(".{ext}");
+                self.extensions.iter().any(|e| e == &dotted)
+            }
+            None => false,
+        }
+    }
+}
 
 /// A scanned-but-unbound block. 1-based inclusive line spans.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,18 +104,21 @@ pub struct ScanResult {
 // @lore
 // purpose: "Scan, bind, and scope a set of source files into qnamed annotation blocks, per-file module assignments, and findings"
 // because: "The per-file module assignment is exposed so the CLI can build the derivation scope without re-implementing the scoping rules (D-061)"
-// unknown: "[modules] globs that fail to compile are dropped silently when matching; the manifest layer validates value types but not glob syntax"
-pub fn scan(config: &ScanConfig, files: &[SourceFile]) -> ScanResult {
+// because: "From T8 the pipeline is pack-driven (D-070): each file's pack supplies the comment token and binder, so one generic adapter scans Python, TypeScript, Rust, Go, and Java"
+pub fn scan(config: &ScanConfig, files: &[SourceFile], packs: &[ActivePack]) -> ScanResult {
     let globs = scoping::CompiledGlobs::compile(&config.modules);
     let mut blocks = Vec::new();
     let mut findings = Vec::new();
     let mut file_modules = Vec::new();
     for file in files {
-        let Some(lang) = Lang::from_path(&file.path) else {
+        let Some(pack) = packs.iter().find(|p| p.claims(&file.path)) else {
             continue;
         };
-        let (raw, mut f) = scan_source(&file.path, &file.text, lang);
-        let (bound, f2) = bind(&file.path, &file.text, lang, raw);
+        let (raw, mut f) = scan_source(&file.path, &file.text, &pack.comment_token);
+        let (bound, f2) = match &pack.binder {
+            Some(b) => b.bind(&file.path, &file.text, raw),
+            None => bind_scan_tier(&file.path, raw),
+        };
         f.extend(f2);
         let (scoped, module) = scoping::scope_file(&globs, file, bound, &mut f);
         blocks.extend(scoped);

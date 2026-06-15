@@ -1,19 +1,22 @@
-use lore_annotations::{BoundBlock, Lang, bind, scan_source};
+use lore_annotations::{BoundBlock, scan_source};
 use lore_intent::Finding;
 use std::path::Path;
 
-fn bind_lang(src: &str, file: &str, lang: Lang) -> (Vec<BoundBlock>, Vec<Finding>) {
-    let p = Path::new(file);
-    let (blocks, mut findings) = scan_source(p, src, lang);
-    let (bound, f2) = bind(p, src, lang, blocks);
+mod common;
+
+fn bind_py(src: &str) -> (Vec<BoundBlock>, Vec<Finding>) {
+    let p = Path::new("f.py");
+    let (blocks, mut findings) = scan_source(p, src, "#");
+    let (bound, f2) = common::python_binder().bind(p, src, blocks);
     findings.extend(f2);
     (bound, findings)
 }
-fn bind_py(src: &str) -> (Vec<BoundBlock>, Vec<Finding>) {
-    bind_lang(src, "f.py", Lang::Python)
-}
 fn bind_ts(src: &str) -> (Vec<BoundBlock>, Vec<Finding>) {
-    bind_lang(src, "f.ts", Lang::TypeScript)
+    let p = Path::new("f.ts");
+    let (blocks, mut findings) = scan_source(p, src, "//");
+    let (bound, f2) = common::typescript_binder().bind(p, src, blocks);
+    findings.extend(f2);
+    (bound, findings)
 }
 
 #[test]

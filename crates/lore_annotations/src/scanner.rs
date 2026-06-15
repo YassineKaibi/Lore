@@ -6,10 +6,17 @@ use std::path::Path;
 
 use lore_intent::{Finding, Kind, Span, Spanned};
 
-use crate::{Lang, RawBlock};
+use crate::RawBlock;
 
-pub fn scan_source(path: &Path, source: &str, lang: Lang) -> (Vec<RawBlock>, Vec<Finding>) {
-    let token = lang.comment_token();
+/// Scan a file for `@lore` blocks (§7.1–§7.2). Only the comment token is
+/// language-specific, supplied by the pack (`[scanner] comment_token`); the
+/// scanner itself is one rule for every language (D-070).
+pub fn scan_source(
+    path: &Path,
+    source: &str,
+    comment_token: &str,
+) -> (Vec<RawBlock>, Vec<Finding>) {
+    let token = comment_token;
     let lines: Vec<&str> = source.lines().collect();
     let mut blocks = Vec::new();
     let mut findings = Vec::new();

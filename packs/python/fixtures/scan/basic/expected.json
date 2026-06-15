@@ -1,0 +1,20 @@
+{
+  "blocks": [
+    {
+      "block_span": {
+        "end": 6,
+        "start": 5
+      },
+      "file": "main.py",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.widget",
+      "subject": "widget",
+      "subject_span": {
+        "end": 9,
+        "start": 7
+      }
+    }
+  ],
+  "findings": []
+}

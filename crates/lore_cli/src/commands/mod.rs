@@ -1,4 +1,5 @@
 pub mod ask;
+pub mod graph;
 pub mod history;
 pub mod init;
 pub mod lint;

@@ -60,7 +60,9 @@ pub(crate) fn scope_file(
         let kind = bb.block.kind.as_ref().map_or(Kind::Function, |k| k.value);
         let block_span = (bb.block.start_line, bb.block.end_line);
 
-        if bb.subject.is_none() {
+        let is_scoping =
+            bb.subject.is_none() && matches!(kind, Kind::Module | Kind::Service | Kind::Workflow);
+        if is_scoping {
             // Scoping block (binder guarantees it has a name:).
             let name = bb
                 .block
@@ -92,13 +94,17 @@ pub(crate) fn scope_file(
             continue;
         }
 
-        let subject = bb.subject.unwrap();
+        // A subject block (bind+ tier) or a spanless scan-tier block (D-070b):
+        // both qname the same way; only the subject span differs (None at scan
+        // tier, so it is never staleness-checked, D-068d).
+        let subject_id = bb.subject.as_ref().and_then(|s| s.identifier.clone());
+        let subject_span = bb.subject.as_ref().map(|s| (s.start_line, s.end_line));
         let name = bb
             .block
             .name
             .as_ref()
             .map(|n| n.value.clone())
-            .or_else(|| subject.identifier.clone())
+            .or_else(|| subject_id.clone())
             .expect("binder requires name: when no identifier is extractable");
 
         let qname = if kind == Kind::Step {
@@ -120,8 +126,8 @@ pub(crate) fn scope_file(
         out.push(ScannedBlock {
             file: file.path.clone(),
             block_span,
-            subject: subject.identifier,
-            subject_span: Some((subject.start_line, subject.end_line)),
+            subject: subject_id,
+            subject_span,
             qname,
             kind,
             module: module.clone(),

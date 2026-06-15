@@ -294,10 +294,10 @@ Every declaration-table node (§7.4) in scope becomes a derived node: functions/
 
 For every call expression inside a function body, resolve the callee:
 1. **Exact:** callee identifier is declared in the same file. Confidence `Exact`.
-2. **Resolved:** callee is imported, and the import resolves (per-language rules below) to a file inside derivation scope. Confidence `Resolved`.
+2. **Resolved:** callee is imported and the import resolves (per-language rules below) to a file inside derivation scope; *or* the pack configures a `package_dir` strategy and the bare callee is an unambiguous declaration in a sibling file of the same directory (the same package, D-077). Confidence `Resolved`.
 3. Otherwise: **dropped**, counted in `lore stats` as `unresolved_calls`. Never guess (D-020).
 
-Import resolution v1: Python -- `import m [as a]` / `from m import n [as a]` against the project source root(s) in `lore.toml [project] roots` (relative imports drop); TypeScript -- relative imports only (`./`, `../`, resolving `<p>.ts|.tsx|.js` or `<p>/index.ts`), named (`{ n [as a] }`) and namespace (`* as m`) forms (default imports drop); Go -- same-package files + intra-module import paths; Java -- same package + explicit single-type imports; Rust -- `use crate::...` paths within the workspace. Anything else (aliases beyond one level, dynamic import, re-exports, star imports, dotted callees deeper than `alias.name(...)`) is out of v1 scope and falls to rule 3 (D-062c). From T8 these rules are realized as pack-selected strategies from the built-in strategy library (§8.6.1, D-071); the semantics above are unchanged.
+Import resolution v1: Python -- `import m [as a]` / `from m import n [as a]` against the project source root(s) in `lore.toml [project] roots` (relative imports drop); TypeScript -- relative imports only (`./`, `../`, resolving `<p>.ts|.tsx|.js` or `<p>/index.ts`), named (`{ n [as a] }`) and namespace (`* as m`) forms (default imports drop); Go -- same-package sibling files (`package_dir`, D-077) + intra-module import paths (`manifest_prefix` strips the `go.mod` module prefix, D-071); Java -- same-package sibling files (`package_dir`) + explicit single-type imports (`root_relative`), both naming by path tail (D-076); Rust -- `use crate::`/`self::`/`super::` paths resolved through the `mod`-declaration tree by the custom `rust_use_paths` strategy (D-071c/D-078). Anything else (aliases beyond one level, dynamic import, re-exports, star imports, dotted callees deeper than `alias.name(...)`) is out of v1 scope and falls to rule 3 (D-062c). From T8 these rules are realized as pack-selected strategies from the built-in strategy library (§8.6.1, D-071); the semantics above are unchanged.
 
 Every call and state touch attributes to the nearest enclosing derived `Function` node; a call with no such node (module/class level, value-bound lambdas, declarations dropped per D-060d), or one resolving to a non-`Function` node, is dropped and counted in `unresolved_calls` (D-062a/b).
 
@@ -359,8 +359,10 @@ Normative keys. An unknown key, missing required key, invalid value, tier/artifa
 | `[scanner] comment_token` | R | Line-comment token (§7.1). |
 | `[binder] wrappers` | O (bind+) | Descend-wrapper node types (§7.3, D-042). |
 | `[binder] sibling_skips` | O (bind+) | Preceding-sibling skip node types (D-050c). |
+| `[derive] value_functions` | O (derive) | Value-bound function node types (lambda/arrow/function-expression). The §8.2/D-062a attribution walk stops at one of these: a call inside a value-bound function has no honest enclosing derived function (D-074). |
 | `[derive] mutators.methods` | O (derive) | Method names that mutate a receiver state symbol (§8.3). |
 | `[derive] mutators.free_functions` | O (derive) | Free functions that mutate their first state-symbol argument (§8.3; e.g. Go `delete`). |
+| `[derive] whole_alias` | O (derive) | `"full"` (default) \| `"last_segment"`. How the implicit alias of a whole-module import is derived from its source path: `full` keeps the whole string (Python `import a.b` binds the harmless `a.b`; TS namespace imports name explicitly), `last_segment` takes the tail after the import separator (Go `import "x/y/helpers"` → `helpers`; Java `import a.b.Helper` → `Helper`). D-076. |
 | `[[derive.imports.strategy]]` | R (derive) | Ordered strategy stanzas: `kind` = `"relative"` \| `"root_relative"` \| `"package_dir"` \| `"manifest_prefix"` \| `"custom"` plus per-kind params (D-071). Tried in order; first resolution wins; no resolution -> drop and count (§8.2 rule 3). |
 
 Example (Go):
@@ -408,7 +410,7 @@ The generic adapter understands a fixed capture vocabulary; any other capture na
 
 **`bind.scm`** (tier bind+): each pattern marks a §7.4 declaration node with exactly one of `@subject.function` (derives `Function`), `@subject.type` (derives `Type`), or `@subject.value` (value-binding form: bindable, derives no node -- D-060a), and captures its identifier as `@subject.name` (the §7.3 host identifier). A form whose pattern cannot capture a single `@subject.name` (multi-target forms) requires an explicit `name:` in the block (`E0104`).
 
-**`derive.scm`** (tier derive): `@call` / `@call.callee` -- call expression and its callee identifier or path (§8.2 resolution applies); `@import` with `@import.source`, `@import.name`, `@import.alias`, `@import.namespace` -- import forms, where **uncaptured forms drop**: the v1 exclusions of §8.2 (default imports, star imports, ...) are expressed by not capturing them, never by adapter special cases; `@touch.assign_lhs`, `@touch.aug_assign_lhs`, `@touch.receiver`, `@touch.call_function` -- state-touch classification sites, combined with the mutator lists per §8.3 (lhs/receiver token equal to a state symbol -> write; any other matched occurrence -> read; confidence `Heuristic` always).
+**`derive.scm`** (tier derive): `@call` with either `@call.callee` (a bare call: the callee identifier) or `@call.receiver` + `@call.method` (a member call `recv.method(...)`, decomposed into the object and member identifiers); a `@call` with neither is opaque and drops (§8.2 rule 3). `@call.construct` marks a local construction binding (`x = Cls()` / `const x = new Cls(...)`) with `@call.construct.var` (bound variable) and `@call.construct.class` (constructed class), feeding the D-062e method-call rule (§8.2 resolution applies to all of these; D-072). `@import` with `@import.source`, `@import.name`, `@import.alias`, `@import.namespace` -- import forms, where **uncaptured forms drop**: the v1 exclusions of §8.2 (default imports, star imports, ...) are expressed by not capturing them, never by adapter special cases; touch occurrence and write-marker captures (D-073): `@touch.symbol` -- a bare identifier occurrence; `@touch.access` with `@touch.access.obj` + `@touch.access.attr` -- a whole-import `alias.attr` access (D-062d); `@touch.assign_lhs`, `@touch.aug_assign_lhs` -- assignment / augmented-assignment targets; `@touch.receiver` + `@touch.call_function` -- a method call's receiver and method name. Combined with the mutator lists per §8.3: an occurrence coinciding with `@touch.assign_lhs`/`@touch.aug_assign_lhs`, or with a `@touch.receiver` whose `@touch.call_function` is a mutator method, is a write; any other matched occurrence is a read; confidence `Heuristic` always. The bare-occurrence validity filter and the write/read decision are engine behavior (D-070g/D-073), not query data. Module declarations (for the custom `rust_use_paths` resolver, D-078): `@module.decl` marks a module-declaration node, `@module.name` its identifier, and `@module.inline` its body (present iff the module is inline, `mod x { ... }` vs `mod x;`) -- the generic extractor emits a per-file module list the engine uses to build the crate module tree.
 
 Binder mechanics (D-042/D-044 wrapper descent and same-row search, D-050 sibling skips), the drop rules, and confidence labeling (§8.2--§8.4) are engine behavior, identical for every pack; a pack supplies only the data above.
 
@@ -423,6 +425,8 @@ Mandatory; this is how packs protect G-7. `fixtures/<class>/<case>/` holds input
 | derive | `derive` | Exact derived node/edge sets with confidences; >=1 required absence (a call that MUST be dropped); per configured import strategy, >=1 resolved and >=1 dropped import; >=1 write and >=1 read state touch; >=1 negative occurrence that MUST NOT classify as a write. |
 
 A pack missing a mandatory class (or with an empty one), or whose suite has not passed for its exact content, MUST NOT be activated (`E0415`). Builtin packs are enforced in CI by the **conformance harness** -- a `lore_cli` test running every embedded pack's suite through the real scan→bind→derive pipeline -- so a failing pack cannot ship. Future external packs (reserved, like WASM grammars) run the suite at first load.
+
+A pack's `fixtures/` directory is conformance test data, not project source: the CLI source walk skips the `fixtures/` directory of any language pack (a `fixtures` dir beside a `lore-lang.toml`), so its deliberately-malformed inputs never enter `lore scan`/`lint` (D-075).
 
 ---
 
@@ -618,6 +622,37 @@ pub enum Kind { Module, Service, Workflow, Step, State, Event, Type, Error, Func
 
 pub enum Severity { Error, Warning }                 // derived from the code letter (D-040)
 pub struct Finding { pub code: &'static str, pub severity: Severity, pub span: Span, pub message: String }
+
+// Language pack as pure data (§8.6, D-070/D-071). lore_cli parses and
+// validates a pack, then hands the PackSpec to lore_annotations / lore_derive
+// alongside the tree-sitter grammar handle as a *separate* argument -- so
+// lore_intent never depends on tree-sitter (D-070d). bind_scm / derive_scm
+// carry the query source text; the generic adapter compiles them at
+// activation (E0411 on a compile failure or unknown capture name).
+pub struct PackSpec {
+    pub name: String,                    // == pack dir name, == lore.toml language id
+    pub format: u32,                     // §8.6.1; this spec defines version 1
+    pub tier: Tier,                      // scan | bind | derive (§8.6.2)
+    pub grammar_id: Option<String>,      // statically linked grammar id (bind+); None at scan
+    pub extensions: Vec<String>,         // claimed file extensions, e.g. [".go"]
+    pub comment_token: String,           // line-comment token (§7.1)
+    pub wrappers: Vec<String>,           // descend-wrapper node types (§7.3, D-042)
+    pub sibling_skips: Vec<String>,      // preceding-sibling skips (D-050c)
+    pub value_functions: Vec<String>,    // value-bound fn node types (lambda/arrow), D-062a/D-074
+    pub mutator_methods: Vec<String>,    // §8.3 receiver mutators
+    pub mutator_free_functions: Vec<String>, // §8.3 first-arg mutators (Go delete)
+    pub imports: Vec<ImportStrategy>,    // ordered; first resolution wins (D-071)
+    pub bind_scm: Option<String>,        // declaration query source (tier bind+)
+    pub derive_scm: Option<String>,      // call/import/touch query source (tier derive)
+}
+pub enum Tier { Scan, Bind, Derive }
+pub enum ImportStrategy {                // §8.6.1, D-071 built-in strategy library
+    Relative       { extensions: Vec<String>, index_files: Vec<String> },
+    RootRelative   { separator: String, extensions: Vec<String>, init_files: Vec<String> },
+    PackageDir     { extensions: Vec<String> },
+    ManifestPrefix { manifest_file: String, prefix_key: String },
+    Custom         { name: String },     // selects a registered lore_derive impl; needs a D-entry
+}
 
 // ---- lore_graph ----
 pub enum EdgeKind { Affects, Reads, Triggers, Emits, Handles, DependsOn, Contains, Sequence, Calls }

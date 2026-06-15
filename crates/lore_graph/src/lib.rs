@@ -215,6 +215,15 @@ impl Graph {
     }
 }
 
+/// Nearest existing qname to a missing one, by edit distance (the D-053a
+/// suggestion shape). Exposed for CLI argument validation, e.g.
+/// `lore graph --focus <qname>` mirroring `lore ask`'s unknown-argument
+/// message. None iff the graph is empty.
+pub fn nearest_qname(missing: &str, graph: &Graph) -> Option<QName> {
+    util::nearest(missing, graph.nodes.keys().map(|q| q.to_string()))
+        .map(|s| QName::from_dotted(&s))
+}
+
 /// A finding plus the node it is attributed to, for `enforcement: strict`
 /// promotion (D-049). Internal: stripped before the findings leave the crate.
 pub(crate) struct OwnedFinding {

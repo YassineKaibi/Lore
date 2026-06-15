@@ -1,0 +1,5 @@
+[project]
+languages = ["python"]
+
+[modules]
+"*.py" = "app"

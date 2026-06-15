@@ -148,6 +148,12 @@ pub fn parse(path: &Path, text: &str) -> Result<Manifest, Finding> {
                     let module = v
                         .as_str()
                         .ok_or_else(|| invalid(glob, "a module name must be a string".into()))?;
+                    // Validate glob syntax here so a malformed pattern fails
+                    // loudly (E0403) instead of being silently dropped at match
+                    // time (resolves the Annotations.scan §8.6 open question).
+                    if let Err(e) = globset::Glob::new(glob) {
+                        return Err(invalid(glob, format!("not a valid glob pattern: {e}")));
+                    }
                     m.modules.push(lore_annotations::ModuleGlob {
                         glob: glob.clone(),
                         module: module.to_string(),

@@ -2,6 +2,13 @@ use lore_annotations::*;
 use lore_intent::{Kind, QName};
 use std::path::PathBuf;
 
+mod common;
+
+/// Scoping (§7.5) is language-agnostic; run it through the builtin packs.
+fn run(config: &ScanConfig, files: &[SourceFile]) -> ScanResult {
+    scan(config, files, &common::packs())
+}
+
 fn cfg(globs: &[(&str, &str)]) -> ScanConfig {
     ScanConfig {
         modules: globs
@@ -23,7 +30,7 @@ fn file(path: &str, text: &str) -> SourceFile {
 #[test]
 fn overlapping_globs_are_e0103_with_first_glob_winning() {
     let c = cfg(&[("src/pay/**", "Payment"), ("src/**", "Everything")]);
-    let r = scan(
+    let r = run(
         &c,
         &[file(
             "src/pay/svc.py",
@@ -39,7 +46,7 @@ fn overlapping_globs_are_e0103_with_first_glob_winning() {
 
 #[test]
 fn orphan_file_is_w0208_with_orphan_qname() {
-    let r = scan(
+    let r = run(
         &cfg(&[]),
         &[file("misc/x.py", "# @lore\ndef f():\n    pass\n")],
     );
@@ -50,7 +57,7 @@ fn orphan_file_is_w0208_with_orphan_qname() {
 
 #[test]
 fn step_outside_workflow_is_e0105() {
-    let r = scan(
+    let r = run(
         &cfg(&[("**", "M")]),
         &[file("a.py", "# @lore\n# kind: step\ndef s():\n    pass\n")],
     );
@@ -61,7 +68,7 @@ fn step_outside_workflow_is_e0105() {
 #[test]
 fn step_under_top_of_file_workflow_gets_workflow_qname() {
     let src = "# @lore\n# kind: workflow\n# name: Onboarding\n\n# @lore\n# kind: step\ndef collect():\n    pass\n";
-    let r = scan(&cfg(&[("**", "M")]), &[file("a.py", src)]);
+    let r = run(&cfg(&[("**", "M")]), &[file("a.py", src)]);
     assert!(r.findings.is_empty());
     assert_eq!(r.blocks[0].qname, QName::from_dotted("Onboarding"));
     assert_eq!(r.blocks[0].kind, Kind::Workflow);
@@ -72,14 +79,14 @@ fn step_under_top_of_file_workflow_gets_workflow_qname() {
 #[test]
 fn top_of_file_module_block_overrides_toml_mapping() {
     let src = "# @lore\n# kind: module\n# name: Billing\n\n# @lore\n# kind: state\nledger = []\n";
-    let r = scan(&cfg(&[("**", "Payment")]), &[file("src/svc.py", src)]);
+    let r = run(&cfg(&[("**", "Payment")]), &[file("src/svc.py", src)]);
     assert_eq!(r.blocks[1].qname, QName::from_dotted("Billing.ledger"));
     assert_eq!(r.blocks[1].module.as_deref(), Some("Billing"));
 }
 
 #[test]
 fn glob_mapping_and_name_override_compose() {
-    let r = scan(
+    let r = run(
         &cfg(&[("src/pay/**", "Payment")]),
         &[file(
             "src/pay/s.py",
@@ -92,7 +99,7 @@ fn glob_mapping_and_name_override_compose() {
 
 #[test]
 fn default_kind_is_function() {
-    let r = scan(
+    let r = run(
         &cfg(&[("**", "M")]),
         &[file("a.py", "# @lore\ndef f():\n    pass\n")],
     );
@@ -101,7 +108,7 @@ fn default_kind_is_function() {
 
 #[test]
 fn results_are_sorted_by_file_then_line() {
-    let r = scan(
+    let r = run(
         &cfg(&[("**", "M")]),
         &[
             file("b.py", "# @lore\ndef g():\n    pass\n"),

@@ -39,6 +39,15 @@ fn non_string_module_target_is_e0403() {
 }
 
 #[test]
+fn malformed_module_glob_is_e0403() {
+    // An unclosed alternate is invalid glob syntax; it must fail loudly, not
+    // be silently dropped at match time (§8.6 Annotations.scan resolution).
+    let err = p("[project]\nname = \"x\"\n[modules]\n\"src/{a,b\" = \"M\"\n").unwrap_err();
+    assert_eq!(err.code, "E0403");
+    assert!(err.message.contains("glob"));
+}
+
+#[test]
 fn syntactically_invalid_toml_is_e0403() {
     let err = p("[project\n").unwrap_err();
     assert_eq!(err.code, "E0403");

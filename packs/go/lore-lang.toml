@@ -1,0 +1,37 @@
+# Go language pack (spec §8.6, §7.4, D-070/D-071). Derive tier.
+#
+# Import resolution (D-071c): `package_dir` resolves bare same-package
+# references across sibling files of a directory (D-077), and `manifest_prefix`
+# resolves intra-module import paths by stripping the `go.mod` module prefix and
+# resolving the remainder as a directory. A package's binding name is the import
+# path tail (D-076 `whole_alias = "last_segment"`, separator `/`).
+
+[pack]
+name   = "go"
+format = 1
+tier   = "derive"
+
+[grammar]
+source = "builtin"
+name   = "tree_sitter_go"
+
+[scanner]
+extensions    = [".go"]
+comment_token = "//"
+
+[derive]
+whole_alias = "last_segment"
+
+[derive.mutators]
+# Go mutates state by reassignment (handled as assignment writes); the built-in
+# `delete(m, k)` mutates its first argument (§8.3).
+free_functions = ["delete"]
+
+[[derive.imports.strategy]]
+kind       = "package_dir"
+extensions = [".go"]
+
+[[derive.imports.strategy]]
+kind          = "manifest_prefix"
+manifest_file = "go.mod"
+prefix_key    = "module"

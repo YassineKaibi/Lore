@@ -1,0 +1,65 @@
+{
+  "blocks": [
+    {
+      "block_span": {
+        "end": 2,
+        "start": 1
+      },
+      "file": "main.py",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.alpha",
+      "subject": "alpha",
+      "subject_span": {
+        "end": 4,
+        "start": 3
+      }
+    },
+    {
+      "block_span": {
+        "end": 8,
+        "start": 7
+      },
+      "file": "main.py",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Beta",
+      "subject": "Beta",
+      "subject_span": {
+        "end": 10,
+        "start": 9
+      }
+    },
+    {
+      "block_span": {
+        "end": 15,
+        "start": 13
+      },
+      "file": "main.py",
+      "kind": "State",
+      "module": "app",
+      "qname": "app.gamma",
+      "subject": "gamma",
+      "subject_span": {
+        "end": 16,
+        "start": 16
+      }
+    },
+    {
+      "block_span": {
+        "end": 20,
+        "start": 19
+      },
+      "file": "main.py",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.delta",
+      "subject": "delta",
+      "subject_span": {
+        "end": 23,
+        "start": 22
+      }
+    }
+  ],
+  "findings": []
+}

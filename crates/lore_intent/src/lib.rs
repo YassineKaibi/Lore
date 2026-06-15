@@ -1,8 +1,10 @@
 //! Shared intent-model contracts (spec §13). These are the AST contract (G-3):
 //! changing a field here is a breaking change for every downstream crate.
 
+mod pack;
 mod parse;
 
+pub use pack::{ImportStrategy, PackSpec, Tier, WholeAlias};
 pub use parse::parse_intent;
 
 use std::fmt;

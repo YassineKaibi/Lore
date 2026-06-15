@@ -1,0 +1,6 @@
+[project]
+languages = ["go"]
+
+[modules]
+"helpers/*.go" = "helpers"
+"*.go" = "app"

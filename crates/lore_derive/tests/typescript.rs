@@ -5,10 +5,13 @@
 use lore_derive::{DeriveConfig, DeriveResult, SourceUnit, StateSymbol, derive};
 use lore_intent::QName;
 
+mod common;
+
 fn cfg() -> DeriveConfig {
     DeriveConfig {
         roots: vec!["src".into()],
         cache_dir: None,
+        manifests: Vec::new(),
     }
 }
 
@@ -68,7 +71,7 @@ fn unresolvable_calls_are_dropped_and_counted() {
             "import f from \"./a\";\n\nclass C {\n  run() {\n    console.log(1);\n    fetch(\"u\");\n    this.run();\n    f();\n  }\n}\n",
         ),
     ];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 4);
 }
@@ -80,7 +83,7 @@ fn calls_inside_arrow_functions_and_at_module_level_drop() {
         "App",
         "export function g() {}\n\ng();\nconst k = () => g();\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 2);
 }
@@ -92,7 +95,7 @@ fn non_relative_imports_drop() {
         "App",
         "import { get } from \"axios\";\n\nfunction fetchIt() {\n  get(\"u\");\n}\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(edges(&r), []);
     assert_eq!(r.unresolved_calls, 1);
 }
@@ -106,7 +109,7 @@ fn declarations_become_nodes_variable_declarations_do_not() {
         "App",
         "const ledger: number[] = [];\nexport function f() {}\nexport class C {\n  m() {}\n}\ninterface I {}\ntype T = string;\nenum E { A }\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         nodes(&r),
         [
@@ -129,7 +132,7 @@ fn same_file_calls_are_exact_and_local_method_calls_resolve() {
         "App",
         "export class Store {\n  save() {}\n}\n\nfunction helper() {}\n\nexport function run() {\n  helper();\n  const s = new Store();\n  s.save();\n}\n",
     )];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         edges(&r),
         [
@@ -160,7 +163,7 @@ fn relative_named_and_namespace_imports_resolve() {
             "export function entry() {}\n",
         ),
     ];
-    let r = derive(&cfg(), &files, &[]);
+    let r = derive(&cfg(), &common::packs(), &files, &[]);
     assert_eq!(
         edges(&r),
         [
@@ -185,7 +188,7 @@ fn mutator_calls_assignments_and_reads_classify_per_the_ts_table() {
         state("App.ledger", "ledger", "src/m.ts", "App"),
         state("App.total", "total", "src/m.ts", "App"),
     ];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(
         edges(&r),
         [
@@ -223,7 +226,7 @@ fn cross_file_touches_resolve_through_named_and_namespace_imports_only() {
         "src/pay/svc.ts",
         "Payment",
     )];
-    let r = derive(&cfg(), &files, &states);
+    let r = derive(&cfg(), &common::packs(), &files, &states);
     assert_eq!(
         edges(&r),
         [e("User.audit", "Payment.ledger", "Affects", "Heuristic")]

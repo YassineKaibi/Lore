@@ -17,7 +17,6 @@ use lore_cli::manifest::{LintLevel, PolicyLevel, UndeclaredEffects};
 // name: lint
 // purpose: "Project-wide lint: every scanner, parser, graph, and reconciliation finding with §10.5 exit codes"
 // because: "Lint is where drift becomes a CI finding instead of a silent decay: contradicted claims and stale blocks fail loudly here (D-019)"
-// triggers: Annotations.scan, Intent.parse_intent, Graph.build
 pub fn run(manifest_path: &Path, json: bool, no_stale: bool, quiet: bool, no_color: bool) -> i32 {
     let p = match project::load(manifest_path) {
         Ok(p) => p,

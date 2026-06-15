@@ -11,9 +11,20 @@
 //! and TypeScript (T6); Go, Java, Rust arrive at T8.
 
 mod cache;
+mod extract;
 mod facts;
-mod lang;
+mod imports;
 mod resolve;
+
+pub use lore_intent::PackSpec;
+
+/// Names of the custom import strategies registered in this crate (D-071b).
+/// The named-impl escape hatch: a pack's `kind = "custom", name = "<id>"`
+/// must name one of these, validated at pack load (E0414). Each requires its
+/// own D-entry; `rust_use_paths` (D-071c) is the first.
+pub fn custom_strategy_names() -> &'static [&'static str] {
+    &["rust_use_paths"]
+}
 
 use std::path::PathBuf;
 
@@ -39,10 +50,26 @@ pub struct StateSymbol {
 }
 
 pub struct DeriveConfig {
-    /// `[project] roots`: import-resolution roots for Python (§8.2).
+    /// `[project] roots`: import-resolution roots (§8.2, the `root_relative`
+    /// strategy's search roots, D-071).
     pub roots: Vec<String>,
     /// `.lore-cache/` location; None disables the cache (D-064).
     pub cache_dir: Option<PathBuf>,
+    /// Language-manifest texts (e.g. Go's `go.mod`) keyed by their
+    /// project-relative path, for the `manifest_prefix` import strategy
+    /// (§8.2 rule 2, D-071). The engine never reads the filesystem (D-058);
+    /// the CLI collects these from the manifest files a derive pack's
+    /// strategies name. Empty for packs that configure no such strategy.
+    pub manifests: Vec<(PathBuf, String)>,
+}
+
+/// One activated language pack (D-070): the validated `PackSpec` as data plus
+/// the tree-sitter grammar handle, passed in as a *separate* argument so
+/// `lore_intent` stays tree-sitter-free (D-070d). `lore_cli` builds these from
+/// its loader and the grammar registry.
+pub struct DerivePack {
+    pub spec: PackSpec,
+    pub grammar: tree_sitter::Language,
 }
 
 /// Edge kinds the derived layer produces (§8.2, §8.3). A subset of the §6.1
@@ -93,25 +120,39 @@ pub struct DeriveResult {
 // @lore
 // purpose: "Derive nodes and confidence-labeled edges from the files in derivation scope"
 // because: "Extraction is per-file and cacheable by content; everything cross-file is resolved fresh each run so the cache can never serve a stale edge (D-064)"
-pub fn derive(config: &DeriveConfig, files: &[SourceUnit], states: &[StateSymbol]) -> DeriveResult {
+// because: "From T8 derivation is pack-driven (D-070): each pack supplies its queries, import strategies, and mutators, so one generic extractor serves every language"
+pub fn derive(
+    config: &DeriveConfig,
+    packs: &[DerivePack],
+    files: &[SourceUnit],
+    states: &[StateSymbol],
+) -> DeriveResult {
+    // Compile each derive-tier pack's queries once (D-070d); reuse across files.
+    let compiled: Vec<extract::CompiledPack> = packs
+        .iter()
+        .filter(|p| p.spec.derive_scm.is_some())
+        .map(extract::CompiledPack::new)
+        .collect();
     let cache = config.cache_dir.as_deref().map(cache::Cache::new);
     let mut extracted = Vec::new();
     for file in files {
-        let Some(language) = lang::Language::from_path(&file.path) else {
-            continue;
+        let Some(cp) = compiled.iter().find(|c| c.claims(&file.path)) else {
+            continue; // no derive-tier pack for this file's extension
         };
-        let key = cache::key(language, file, &config.roots, states);
+        let key = cache::key(&cp.id, file, &config.roots, states);
         let facts = cache
             .as_ref()
             .and_then(|c| c.load(&key))
             .unwrap_or_else(|| {
-                let facts = facts::extract(language, file, states);
+                let facts = extract::extract(cp, file, states);
                 if let Some(c) = &cache {
                     c.store(&key, &facts);
                 }
                 facts
             });
-        extracted.push((file, language, facts));
+        extracted.push((file, cp, facts));
     }
-    resolve::resolve(&extracted, states, &config.roots)
+    let manifests: std::collections::HashMap<PathBuf, String> =
+        config.manifests.iter().cloned().collect();
+    resolve::resolve(&extracted, states, &config.roots, &manifests)
 }

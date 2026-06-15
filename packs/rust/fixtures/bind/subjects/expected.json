@@ -1,0 +1,80 @@
+{
+  "blocks": [
+    {
+      "block_span": {
+        "end": 2,
+        "start": 1
+      },
+      "file": "main.rs",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.alpha",
+      "subject": "alpha",
+      "subject_span": {
+        "end": 3,
+        "start": 3
+      }
+    },
+    {
+      "block_span": {
+        "end": 6,
+        "start": 5
+      },
+      "file": "main.rs",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Beta",
+      "subject": "Beta",
+      "subject_span": {
+        "end": 7,
+        "start": 7
+      }
+    },
+    {
+      "block_span": {
+        "end": 10,
+        "start": 9
+      },
+      "file": "main.rs",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Gamma",
+      "subject": "Gamma",
+      "subject_span": {
+        "end": 13,
+        "start": 11
+      }
+    },
+    {
+      "block_span": {
+        "end": 17,
+        "start": 15
+      },
+      "file": "main.rs",
+      "kind": "State",
+      "module": "app",
+      "qname": "app.DELTA",
+      "subject": "DELTA",
+      "subject_span": {
+        "end": 18,
+        "start": 18
+      }
+    },
+    {
+      "block_span": {
+        "end": 21,
+        "start": 20
+      },
+      "file": "main.rs",
+      "kind": "Function",
+      "module": "app",
+      "qname": "app.Epsilon",
+      "subject": "Epsilon",
+      "subject_span": {
+        "end": 23,
+        "start": 23
+      }
+    }
+  ],
+  "findings": []
+}

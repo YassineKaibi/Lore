@@ -1,0 +1,7 @@
+[project]
+languages = ["python"]
+roots = ["src"]
+
+[modules]
+"src/app.py" = "app"
+"src/helpers.py" = "helpers"

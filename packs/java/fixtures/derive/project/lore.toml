@@ -1,0 +1,7 @@
+[project]
+languages = ["java"]
+roots = ["src"]
+
+[modules]
+"src/app/util/**" = "app.util"
+"src/app/**" = "app"

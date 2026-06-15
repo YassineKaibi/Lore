@@ -1,0 +1,23 @@
+# @lore
+# purpose: "a function subject (@subject.function)"
+def alpha():
+    pass
+
+
+# @lore
+# purpose: "a class subject (@subject.type)"
+class Beta:
+    pass
+
+
+# @lore
+# kind: state
+# name: gamma
+gamma = 0
+
+
+# @lore
+# purpose: "decorated function — exercises the decorated_definition wrapper descent"
+@decorator
+def delta():
+    pass
