@@ -5,7 +5,7 @@
 //! exercise the shipping packs, not a stand-in.
 
 use lore_derive::DerivePack;
-use lore_intent::{ImportStrategy, PackSpec, Tier};
+use lore_intent::{ImportStrategy, PackSpec, Tier, WholeAlias};
 
 fn strings(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| s.to_string()).collect()
@@ -43,6 +43,7 @@ fn python_pack() -> DerivePack {
                 "discard",
             ]),
             mutator_free_functions: Vec::new(),
+            whole_alias: WholeAlias::Full,
             imports: vec![ImportStrategy::RootRelative {
                 separator: ".".into(),
                 extensions: strings(&[".py"]),
@@ -76,6 +77,7 @@ fn typescript_pack() -> DerivePack {
                 "delete", "clear", "add",
             ]),
             mutator_free_functions: Vec::new(),
+            whole_alias: WholeAlias::Full,
             imports: vec![ImportStrategy::Relative {
                 extensions: strings(&[".ts", ".tsx", ".js"]),
                 index_files: strings(&["index.ts"]),

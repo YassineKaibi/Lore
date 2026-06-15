@@ -89,10 +89,24 @@ pub(crate) struct TouchFact {
     pub span: SpanFact,
 }
 
+/// A module declaration (`mod x;` / `mod x { }`), for the `rust_use_paths`
+/// resolver's crate module tree (§8.6.3, D-078). `inline` is true for a
+/// body-bearing `mod x { }` (items live in the same file) and false for an
+/// external `mod x;` (items live in a sibling file).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ModFact {
+    pub name: String,
+    pub inline: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct FileFacts {
     pub decls: Vec<DeclFact>,
     pub calls: Vec<CallFact>,
     pub imports: Vec<ImportFact>,
     pub touches: Vec<TouchFact>,
+    /// Module declarations (D-078). `#[serde(default)]` so cache entries
+    /// written before this field degrade to a miss, not a hard error (D-064).
+    #[serde(default)]
+    pub mods: Vec<ModFact>,
 }

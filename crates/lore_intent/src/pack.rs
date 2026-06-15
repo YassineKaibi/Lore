@@ -68,6 +68,18 @@ pub enum ImportStrategy {
     Custom { name: String },
 }
 
+/// How a whole-module import's implicit alias is derived from its source path
+/// (§8.6.1, D-076). `Full` keeps the whole source string (Python `import a.b`
+/// binds the harmless `a.b`); `LastSegment` takes the tail after the import
+/// separator (Go `import "x/y/helpers"` → `helpers`, Java `import a.b.Helper`
+/// → `Helper`). An explicit alias/namespace capture always wins over either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WholeAlias {
+    #[default]
+    Full,
+    LastSegment,
+}
+
 /// A language pack as validated data (§13). Carries no tree-sitter types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackSpec {
@@ -85,6 +97,8 @@ pub struct PackSpec {
     pub value_functions: Vec<String>,
     pub mutator_methods: Vec<String>,
     pub mutator_free_functions: Vec<String>,
+    /// How whole-module import aliases are derived from the source path (D-076).
+    pub whole_alias: WholeAlias,
     pub imports: Vec<ImportStrategy>,
     pub bind_scm: Option<String>,
     pub derive_scm: Option<String>,

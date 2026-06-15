@@ -10,6 +10,8 @@ pub fn lookup(id: &str) -> Option<tree_sitter::Language> {
         "tree_sitter_typescript" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         "tree_sitter_tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
         "tree_sitter_rust" => tree_sitter_rust::LANGUAGE.into(),
+        "tree_sitter_go" => tree_sitter_go::LANGUAGE.into(),
+        "tree_sitter_java" => tree_sitter_java::LANGUAGE.into(),
         _ => return None,
     })
 }
@@ -20,4 +22,6 @@ pub const KNOWN: &[&str] = &[
     "tree_sitter_typescript",
     "tree_sitter_tsx",
     "tree_sitter_rust",
+    "tree_sitter_go",
+    "tree_sitter_java",
 ];

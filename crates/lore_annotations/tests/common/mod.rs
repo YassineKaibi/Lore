@@ -39,6 +39,7 @@ fn spec(
         value_functions: Vec::new(),
         mutator_methods: Vec::new(),
         mutator_free_functions: Vec::new(),
+        whole_alias: lore_intent::WholeAlias::Full,
         imports: Vec::new(),
         bind_scm: Some(bind.into()),
         derive_scm: None,

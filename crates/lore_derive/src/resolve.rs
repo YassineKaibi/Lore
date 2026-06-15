@@ -85,6 +85,10 @@ pub(crate) fn resolve(
         })
         .collect();
 
+    // Rust crate module tree for `rust_use_paths` (D-078); empty for packs
+    // that declare no `mod` captures.
+    let (module_paths, modules_by_path) = build_module_tree(extracted, roots, &file_index);
+
     // Language manifests for the `manifest_prefix` strategy (Go's go.mod, etc.),
     // supplied by the CLI (D-058: the engine never reads the filesystem).
     // Python and TypeScript configure no such strategy, so this is empty for
@@ -95,8 +99,38 @@ pub(crate) fn resolve(
             roots,
             files: &file_index,
             manifests,
+            module_paths: &module_paths,
+            modules_by_path: &modules_by_path,
         };
         imports::resolve(&cp.strategies, import.module(), &file.path, &data)
+    };
+
+    // D-077: a pack with a `package_dir` strategy resolves a bare callee
+    // unresolved in its own file across sibling files of the same directory
+    // (the package). Unambiguous match only; otherwise drop (G-7).
+    let same_package_bare = |i: usize, name: &str| -> Option<(usize, usize)> {
+        let (file, cp, _) = &extracted[i];
+        if !cp
+            .strategies
+            .iter()
+            .any(|s| matches!(s, lore_intent::ImportStrategy::PackageDir { .. }))
+        {
+            return None;
+        }
+        let dir = file.path.parent();
+        let mut found = None;
+        for (j, (f, _, _)) in extracted.iter().enumerate() {
+            if j == i || f.path.parent() != dir {
+                continue;
+            }
+            if let Some(&d) = by_name[j].get(name) {
+                if found.is_some() {
+                    return None; // ambiguous across the package
+                }
+                found = Some((j, d));
+            }
+        }
+        found
     };
 
     // §8.1 nodes: every unambiguous declaration, origin Derived.
@@ -143,6 +177,11 @@ pub(crate) fn resolve(
                                 .get(orig)
                                 .map(|&j| (k, j, DerivedConfidence::Resolved))
                         })
+                    })
+                    .or_else(|| {
+                        // same-package sibling file (D-077): crossed a file
+                        // boundary, so Resolved, not Exact.
+                        same_package_bare(i, name).map(|(k, j)| (k, j, DerivedConfidence::Resolved))
                     }),
                 CalleeFact::Attr { obj, name } => {
                     whole_import(&facts.imports, obj).and_then(|ii| {
@@ -281,5 +320,93 @@ fn to_span(file: &Path, s: SpanFact) -> Span {
         col: s.col,
         end_line: s.end_line,
         end_col: s.end_col,
+    }
+}
+
+/// The crate module tree for `rust_use_paths` (D-078), built from the per-file
+/// `mod` declarations: crate roots (`lib.rs`/`main.rs` directly under a
+/// `[project] roots` dir) seed module path `["crate"]`; an external `mod x;`
+/// maps `P::x` to the sibling `x.rs`/`x/mod.rs` under the declaring file's
+/// module directory; an inline `mod x { }` maps `P::x` to the same file.
+/// Returns (file -> module path, module path -> file index). Empty when no
+/// file declares modules (every non-Rust pack).
+type ModulePaths<'a> = HashMap<&'a Path, Vec<String>>;
+type ModulesByPath = HashMap<Vec<String>, usize>;
+
+fn build_module_tree<'a>(
+    extracted: &'a [(&SourceUnit, &CompiledPack, FileFacts)],
+    roots: &[String],
+    file_index: &HashMap<&'a Path, usize>,
+) -> (ModulePaths<'a>, ModulesByPath) {
+    let mut module_paths: HashMap<&Path, Vec<String>> = HashMap::new();
+    let mut by_path: HashMap<Vec<String>, usize> = HashMap::new();
+    let mut queue: std::collections::VecDeque<(&Path, Vec<String>)> =
+        std::collections::VecDeque::new();
+
+    for (i, (f, _, _)) in extracted.iter().enumerate() {
+        let p = f.path.as_path();
+        if is_crate_root(p, roots) && !module_paths.contains_key(p) {
+            let crate_path = vec!["crate".to_string()];
+            module_paths.insert(p, crate_path.clone());
+            by_path.entry(crate_path.clone()).or_insert(i);
+            queue.push_back((p, crate_path));
+        }
+    }
+
+    while let Some((file, path)) = queue.pop_front() {
+        let Some(&i) = file_index.get(file) else {
+            continue;
+        };
+        let dir = module_dir(file, roots);
+        for m in &extracted[i].2.mods {
+            let mut child = path.clone();
+            child.push(m.name.clone());
+            if m.inline {
+                by_path.entry(child).or_insert(i); // items live in the same file
+                continue;
+            }
+            for cand in [
+                dir.join(format!("{}.rs", m.name)),
+                dir.join(&m.name).join("mod.rs"),
+            ] {
+                if let Some((key, &ci)) = file_index.get_key_value(cand.as_path()) {
+                    if !module_paths.contains_key(*key) {
+                        module_paths.insert(*key, child.clone());
+                        by_path.entry(child.clone()).or_insert(ci);
+                        queue.push_back((*key, child));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    (module_paths, by_path)
+}
+
+/// A crate root is a `lib.rs`/`main.rs` sitting directly under a roots dir;
+/// its module path is `["crate"]`.
+fn is_crate_root(file: &Path, roots: &[String]) -> bool {
+    let Some(name) = file.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    if name != "lib.rs" && name != "main.rs" {
+        return false;
+    }
+    let parent = file.parent().unwrap_or(Path::new(""));
+    roots.iter().any(|r| parent == Path::new(r))
+}
+
+/// The directory external submodules of `file` live in: a crate root or
+/// `mod.rs` owns its own directory; any other `foo.rs` owns `foo/`.
+fn module_dir(file: &Path, roots: &[String]) -> PathBuf {
+    let parent = file.parent().unwrap_or(Path::new("")).to_path_buf();
+    let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name == "mod.rs" || is_crate_root(file, roots) {
+        parent
+    } else {
+        match file.file_stem().and_then(|s| s.to_str()) {
+            Some(stem) => parent.join(stem),
+            None => parent,
+        }
     }
 }

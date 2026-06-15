@@ -4,7 +4,7 @@
 mod pack;
 mod parse;
 
-pub use pack::{ImportStrategy, PackSpec, Tier};
+pub use pack::{ImportStrategy, PackSpec, Tier, WholeAlias};
 pub use parse::parse_intent;
 
 use std::fmt;

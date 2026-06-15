@@ -15,7 +15,7 @@ mod grammar;
 
 use std::path::{Path, PathBuf};
 
-use lore_intent::{Finding, ImportStrategy, PackSpec, Span, Tier};
+use lore_intent::{Finding, ImportStrategy, PackSpec, Span, Tier, WholeAlias};
 use toml::Value;
 
 /// Turn a validated pack into a `lore_annotations` adapter, compiling
@@ -309,6 +309,7 @@ pub fn load(src: &PackSource) -> Result<LoadedPack, Finding> {
     let mut value_functions = Vec::new();
     let mut mutator_methods = Vec::new();
     let mut mutator_free_functions = Vec::new();
+    let mut whole_alias = WholeAlias::Full;
     let mut imports = Vec::new();
     if let Some(d) = root.get("derive").and_then(Value::as_table) {
         if tier != Tier::Derive {
@@ -318,6 +319,16 @@ pub fn load(src: &PackSource) -> Result<LoadedPack, Finding> {
             )));
         }
         value_functions = opt_str_array(d, "value_functions", "[derive] value_functions", &e0410)?;
+        whole_alias = match d.get("whole_alias") {
+            None => WholeAlias::Full,
+            Some(Value::String(s)) if s == "full" => WholeAlias::Full,
+            Some(Value::String(s)) if s == "last_segment" => WholeAlias::LastSegment,
+            Some(_) => {
+                return Err(e0410(
+                    "[derive] whole_alias must be \"full\" or \"last_segment\"".into(),
+                ));
+            }
+        };
         if let Some(m) = d.get("mutators") {
             let m = m
                 .as_table()
@@ -340,7 +351,7 @@ pub fn load(src: &PackSource) -> Result<LoadedPack, Finding> {
         reject_unknown(
             d,
             "[derive]",
-            &["value_functions", "mutators", "imports"],
+            &["value_functions", "mutators", "whole_alias", "imports"],
             &e0410,
         )?;
     }
@@ -393,6 +404,7 @@ pub fn load(src: &PackSource) -> Result<LoadedPack, Finding> {
             value_functions,
             mutator_methods,
             mutator_free_functions,
+            whole_alias,
             imports,
             bind_scm,
             derive_scm,

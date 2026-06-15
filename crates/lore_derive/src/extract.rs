@@ -9,12 +9,12 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use lore_intent::ImportStrategy;
+use lore_intent::{ImportStrategy, WholeAlias};
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Language, Node, Query, QueryCursor, Tree};
 
 use crate::facts::{
-    CallFact, CalleeFact, DeclFact, DeclKind, FileFacts, ImportFact, SpanFact, TouchFact,
+    CallFact, CalleeFact, DeclFact, DeclKind, FileFacts, ImportFact, ModFact, SpanFact, TouchFact,
 };
 use crate::{DerivePack, SourceUnit, StateSymbol};
 
@@ -32,6 +32,10 @@ pub(crate) struct CompiledPack {
     derive: Query,
     value_functions: Vec<String>,
     mutators: HashSet<String>,
+    /// How to derive a whole-import's implicit alias (D-076) and the separator
+    /// to split the path on when it is `LastSegment`.
+    whole_alias: WholeAlias,
+    import_sep: String,
     b: BindCaps,
     d: DeriveCaps,
 }
@@ -60,6 +64,8 @@ struct DeriveCaps {
     t_aug: Option<u32>,
     t_recv: Option<u32>,
     t_call_fn: Option<u32>,
+    mod_name: Option<u32>,
+    mod_inline: Option<u32>,
 }
 
 impl CompiledPack {
@@ -102,7 +108,20 @@ impl CompiledPack {
             t_aug: idx(&derive, "touch.aug_assign_lhs"),
             t_recv: idx(&derive, "touch.receiver"),
             t_call_fn: idx(&derive, "touch.call_function"),
+            mod_name: idx(&derive, "module.name"),
+            mod_inline: idx(&derive, "module.inline"),
         };
+        // The separator for D-076 last-segment aliasing: a path strategy's
+        // own separator (root_relative's `.`) or `/` for the path-shaped ones.
+        let import_sep = pack
+            .spec
+            .imports
+            .iter()
+            .find_map(|s| match s {
+                ImportStrategy::RootRelative { separator, .. } => Some(separator.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| "/".to_string());
         CompiledPack {
             id: format!(
                 "{}:{:016x}",
@@ -116,6 +135,8 @@ impl CompiledPack {
             derive,
             value_functions: pack.spec.value_functions.clone(),
             mutators: pack.spec.mutator_methods.iter().cloned().collect(),
+            whole_alias: pack.spec.whole_alias,
+            import_sep,
             b,
             d,
         }
@@ -168,6 +189,7 @@ pub(crate) fn extract(cp: &CompiledPack, file: &SourceUnit, states: &[StateSymbo
 
     let calls = collect_calls(cp, &derive_matches, &decl_index, &decls, &locals, text);
     let imports = collect_imports(cp, &derive_matches, text);
+    let mods = collect_mods(cp, &derive_matches, text);
     let touches = collect_touches(
         cp,
         &derive_matches,
@@ -185,6 +207,7 @@ pub(crate) fn extract(cp: &CompiledPack, file: &SourceUnit, states: &[StateSymbo
         calls,
         imports,
         touches,
+        mods,
     }
 }
 
@@ -328,16 +351,51 @@ fn collect_imports<'t>(
                     .unwrap_or_else(|| text(name).to_string()),
             }
         } else {
+            // Explicit namespace wins; else the implicit alias is the whole
+            // source (Python/TS, `Full`) or its path tail (Go/Java, D-076).
             let alias = m
                 .cap(cp.d.imp_ns)
                 .map(|n| text(n).to_string())
-                .unwrap_or_else(|| text(source).to_string());
+                .unwrap_or_else(|| match cp.whole_alias {
+                    WholeAlias::Full => module.clone(),
+                    WholeAlias::LastSegment => module
+                        .rsplit(cp.import_sep.as_str())
+                        .next()
+                        .unwrap_or(module.as_str())
+                        .to_string(),
+                });
             ImportFact::Whole { module, alias }
         };
         out.push((source.start_byte(), fact));
     }
     out.sort_by_key(|(b, _)| *b);
     out.into_iter().map(|(_, f)| f).collect()
+}
+
+/// Module declarations for the `rust_use_paths` crate tree (D-078): one
+/// `ModFact` per `@module.name`, `inline` iff the pattern also captured a
+/// `@module.inline` body. Document order (irrelevant: the tree keys by name).
+fn collect_mods<'t>(
+    cp: &CompiledPack,
+    matches: &[Match<'t>],
+    text: impl Fn(Node<'t>) -> &'t str,
+) -> Vec<ModFact> {
+    let mut by_node: HashMap<usize, (String, bool)> = HashMap::new();
+    for m in matches {
+        let Some(name) = m.cap(cp.d.mod_name) else {
+            continue;
+        };
+        let entry = by_node
+            .entry(name.id())
+            .or_insert_with(|| (text(name).to_string(), false));
+        if m.cap(cp.d.mod_inline).is_some() {
+            entry.1 = true;
+        }
+    }
+    by_node
+        .into_values()
+        .map(|(name, inline)| ModFact { name, inline })
+        .collect()
 }
 
 /// §8.3 occurrence scan (D-073 hybrid): the query supplies occurrence shapes
