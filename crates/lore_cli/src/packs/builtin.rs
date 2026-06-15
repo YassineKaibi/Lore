@@ -45,5 +45,13 @@ pub fn sources() -> Vec<PackSource> {
             derive_scm: None,
             fixture_classes: vec!["scan".into(), "bind".into()],
         },
+        PackSource {
+            name: "java".into(),
+            manifest_path: "packs/java/lore-lang.toml".into(),
+            manifest: pack_file!("java", "lore-lang.toml").into(),
+            bind_scm: Some(pack_file!("java", "queries/bind.scm").into()),
+            derive_scm: Some(pack_file!("java", "queries/derive.scm").into()),
+            fixture_classes: vec!["scan".into(), "bind".into(), "derive".into()],
+        },
     ]
 }

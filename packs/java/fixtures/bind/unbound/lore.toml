@@ -1,0 +1,5 @@
+[project]
+languages = ["java"]
+
+[modules]
+"*.java" = "app"

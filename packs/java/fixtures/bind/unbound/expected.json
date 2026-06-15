@@ -1,0 +1,12 @@
+{
+  "blocks": [],
+  "findings": [
+    {
+      "code": "E0102",
+      "file": "Unbound.java",
+      "line": 3,
+      "message": "this @lore block is not followed by a bindable declaration (found expression_statement); move it directly above a function, class, type, or assignment",
+      "severity": "error"
+    }
+  ]
+}
