@@ -272,7 +272,7 @@ Adding a language = adding one row here plus a language pack realizing it (§8.6
 
 1. `lore.toml [modules]` maps path globs → module names. Every file matching a glob belongs to that module. Overlapping globs assigning two different modules to one file: `E0103`.
 2. A top-of-file block with `kind: module` (or `service`/`workflow`) scopes that file and overrides (1) for that file.
-3. A file in neither: annotated subjects get qname `_orphan.<name>` and `W0208`.
+3. A file in neither: annotated subjects get qname `_orphan.<name>` and `W0208`. To avoid this for root-level files, `lore init` proposes a `<root>/*` glob alongside the per-directory globs (D-081).
 
 Subject qname = `<module name>.<name>`. Steps additionally require an enclosing `kind: workflow` block in the same file, in order (`E0105` otherwise); step qname = `<workflow qname>.<step name>`, where a file-scoping workflow block's qname is its bare name (D-042).
 
@@ -569,7 +569,7 @@ Single binary `lore` (crate `lore_cli`).
 
 | Command | Does | Milestone |
 |---|---|---|
-| `lore init` | Write a starter `lore.toml`; detect languages; propose `[modules]` globs from directory names | T1 |
+| `lore init` | Write a starter `lore.toml`; detect languages; propose `[modules]` globs from directory names, plus a disjoint `<root>/*` glob for root-level source files (D-081) | T1 |
 | `lore scan [--json]` | Scanner+binder only: list every annotation block, its subject, qname, kind | T1 |
 | `lore ask "<query>" [--json] [--all --max-len N]` | §10 | T4 |
 | `lore lint [--json] [--no-stale]` | Resolution checks, required intent, applicability, depends_on surface, hygiene (`W0210`-`W0212`), reconciliation, staleness; exit per §10.5 | T3 (structural) → T7 (full) |

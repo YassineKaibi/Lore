@@ -18,12 +18,11 @@ pub fn run() -> i32 {
     detect_languages(&cwd, &mut languages);
 
     let root = if cwd.join("src").is_dir() { "src" } else { "." };
-    let modules = propose_modules(&cwd, root);
-
     let name = cwd.file_name().map_or_else(
         || "project".to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
+    let modules = propose_modules(&cwd, root, &name);
     let mut text = String::new();
     text.push_str("[project]\n");
     text.push_str(&format!("name = \"{name}\"\n"));
@@ -80,8 +79,12 @@ fn language_of(path: &Path) -> Option<&'static str> {
     }
 }
 
-/// One proposal per child dir of the root that contains source files.
-fn propose_modules(cwd: &Path, root: &str) -> Vec<(String, String)> {
+/// One proposal per child dir of the root that contains source files, plus --
+/// when the root directory itself holds source files directly -- a disjoint
+/// `<root>/*` glob so root-level files (`src/main.rs`) are scoped, not orphaned
+/// (W0208, §7.5(3); D-081). `*` does not cross `/`, so `<root>/*` matches only
+/// direct file children and never overlaps a `<root>/<dir>/**` glob (no E0103).
+fn propose_modules(cwd: &Path, root: &str, project: &str) -> Vec<(String, String)> {
     let root_dir = if root == "." {
         cwd.to_path_buf()
     } else {
@@ -90,8 +93,9 @@ fn propose_modules(cwd: &Path, root: &str) -> Vec<(String, String)> {
     let Ok(entries) = std::fs::read_dir(&root_dir) else {
         return Vec::new();
     };
+    let entries: Vec<_> = entries.flatten().collect();
     let mut dirs: Vec<String> = entries
-        .flatten()
+        .iter()
         .filter(|e| {
             let name = e.file_name();
             let name = name.to_string_lossy();
@@ -105,7 +109,8 @@ fn propose_modules(cwd: &Path, root: &str) -> Vec<(String, String)> {
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
     dirs.sort();
-    dirs.into_iter()
+    let mut out: Vec<(String, String)> = dirs
+        .into_iter()
         .map(|dir| {
             let glob = if root == "." {
                 format!("{dir}/**")
@@ -114,7 +119,21 @@ fn propose_modules(cwd: &Path, root: &str) -> Vec<(String, String)> {
             };
             (glob, pascal_case(&dir))
         })
-        .collect()
+        .collect();
+
+    // Cover root-level source files with a trailing, disjoint catch-all.
+    let has_root_files = entries
+        .iter()
+        .any(|e| e.path().is_file() && language_of(&e.path()).is_some());
+    if has_root_files {
+        let glob = if root == "." {
+            "*".to_string()
+        } else {
+            format!("{root}/*")
+        };
+        out.push((glob, pascal_case(project)));
+    }
+    out
 }
 
 /// "user_accounts" / "user-accounts" -> "UserAccounts".
