@@ -1,0 +1,41 @@
+# Python language pack (spec §8.6, §7.4). Migrated from the pre-T8
+# veridikt_annotations Lang::Python row + veridikt_derive/src/lang/python (D-070h).
+# Derive tier (D-070/D-071): bind.scm + derive.scm + import strategies +
+# mutators reproduce the pre-T8 Python derivation exactly.
+
+[pack]
+name   = "python"
+format = 1
+tier   = "derive"
+
+[grammar]
+source = "builtin"
+name   = "tree_sitter_python"
+
+[scanner]
+extensions    = [".py"]
+comment_token = "#"
+
+[binder]
+# §7.4 wrapper/skip column (D-042): descend through these to the declaration.
+wrappers = ["decorated_definition", "expression_statement"]
+
+[derive]
+# Value-bound functions: a call inside a lambda has no enclosing derived
+# function (D-062a/D-074).
+value_functions = ["lambda"]
+
+[derive.mutators]
+# §8.3 list/dict/set mutators.
+methods = [
+  "append", "extend", "insert", "remove", "pop", "clear",
+  "update", "setdefault", "sort", "reverse", "add", "discard",
+]
+
+# §8.2 import resolution (D-071c): dotted module names against [project] roots;
+# relative imports stay dropped (no `relative` strategy configured — G-7).
+[[derive.imports.strategy]]
+kind       = "root_relative"
+separator  = "."
+extensions = [".py"]
+init_files = ["__init__.py"]

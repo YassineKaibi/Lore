@@ -1,22 +1,22 @@
-# @lore
+# @veridikt
 # purpose: "a function subject (@subject.function)"
 def alpha():
     pass
 
 
-# @lore
+# @veridikt
 # purpose: "a class subject (@subject.type)"
 class Beta:
     pass
 
 
-# @lore
+# @veridikt
 # kind: state
 # name: gamma
 gamma = 0
 
 
-# @lore
+# @veridikt
 # purpose: "decorated function — exercises the decorated_definition wrapper descent"
 @decorator
 def delta():

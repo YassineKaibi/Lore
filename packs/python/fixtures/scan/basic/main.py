@@ -1,9 +1,9 @@
-# A plain comment that must NOT scan as a block (no @lore marker, §7.1).
-# @lore is only recognized on the comment token; this line alone is prose.
+# A plain comment that must NOT scan as a block (no @veridikt marker, §7.1).
+# @veridikt is only recognized on the comment token; this line alone is prose.
 
 
-# @lore
+# @veridikt
 # purpose: "the one block that scans"
 def widget():
-    """A docstring mentioning @lore must not scan as a block either."""
+    """A docstring mentioning @veridikt must not scan as a block either."""
     return 1

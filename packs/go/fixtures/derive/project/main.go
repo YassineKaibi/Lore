@@ -3,12 +3,12 @@ package app
 import "example.com/app/helpers"
 import "example.com/app/missing"
 
-// @lore
+// @veridikt
 // kind: state
 // name: counter
 var counter int = 0
 
-// @lore
+// @veridikt
 // purpose: "same-file, same-package, and cross-package calls, dropped calls, a write"
 func Driver() {
 	local()
@@ -20,11 +20,11 @@ func Driver() {
 	counter++
 }
 
-// @lore
+// @veridikt
 // purpose: "the same-file Exact-call target"
 func local() {}
 
-// @lore
+// @veridikt
 // purpose: "reads the state symbol — a non-write occurrence"
 func Show() int {
 	return counter

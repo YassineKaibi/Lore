@@ -3,12 +3,12 @@ mod helpers;
 use crate::helpers::run;
 use crate::missing::ghost;
 
-// @lore
+// @veridikt
 // kind: state
 // name: COUNTER
 static mut COUNTER: u32 = 0;
 
-// @lore
+// @veridikt
 // purpose: "same-file call, resolved use-path call, dropped call, and a write"
 fn driver() {
     local();
@@ -19,11 +19,11 @@ fn driver() {
     }
 }
 
-// @lore
+// @veridikt
 // purpose: "the same-file Exact-call target"
 fn local() {}
 
-// @lore
+// @veridikt
 // purpose: "reads the state symbol — a non-write occurrence"
 fn show() -> u32 {
     unsafe { COUNTER }

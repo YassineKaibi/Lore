@@ -1,0 +1,12 @@
+[package]
+name = "veridikt_graph"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+veridikt_intent.workspace = true
+# CODEOWNERS pattern matching (D-058c)
+globset.workspace = true
+
+[lints]
+workspace = true

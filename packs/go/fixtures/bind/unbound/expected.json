@@ -5,7 +5,7 @@
       "code": "E0102",
       "file": "main.go",
       "line": 3,
-      "message": "this @lore block is not followed by a bindable declaration (found import_declaration); move it directly above a function, class, type, or assignment",
+      "message": "this @veridikt block is not followed by a bindable declaration (found import_declaration); move it directly above a function, class, type, or assignment",
       "severity": "error"
     }
   ]

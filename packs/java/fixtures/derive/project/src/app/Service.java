@@ -4,12 +4,12 @@ import app.util.Helper;
 import app.util.Missing;
 
 class Service {
-  // @lore
+  // @veridikt
   // kind: state
   // name: counter
   static int counter = 0;
 
-  // @lore
+  // @veridikt
   // purpose: "same-file call, root_relative import call, and a dropped call"
   void driver() {
     bump();
@@ -18,7 +18,7 @@ class Service {
     counter = counter + 1;
   }
 
-  // @lore
+  // @veridikt
   // purpose: "reads the state symbol — a non-write occurrence"
   int show() {
     return counter;

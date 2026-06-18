@@ -74,6 +74,21 @@
         "end": 23,
         "start": 23
       }
+    },
+    {
+      "block_span": {
+        "end": 28,
+        "start": 26
+      },
+      "file": "main.rs",
+      "kind": "State",
+      "module": "app",
+      "qname": "app.cells",
+      "subject": "cells",
+      "subject_span": {
+        "end": 29,
+        "start": 29
+      }
     }
   ],
   "findings": []

@@ -1,22 +1,22 @@
 package app
 
-// @lore
+// @veridikt
 // purpose: "a function subject (@subject.function)"
 func Alpha() {}
 
-// @lore
+// @veridikt
 // purpose: "a type subject (@subject.type)"
 type Beta struct{}
 
-// @lore
+// @veridikt
 // kind: state
 // name: Gamma
 var Gamma int = 0
 
-// @lore
+// @veridikt
 // purpose: "a const subject (@subject.value)"
 const Delta = 1
 
-// @lore
+// @veridikt
 // purpose: "a method subject (@subject.function)"
 func (b Beta) Meth() {}

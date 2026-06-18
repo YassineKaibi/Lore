@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/lore_intent",
-    "crates/lore_annotations",
-    "crates/lore_derive",
-    "crates/lore_graph",
-    "crates/lore_cli",
+    "crates/veridikt_intent",
+    "crates/veridikt_annotations",
+    "crates/veridikt_derive",
+    "crates/veridikt_graph",
+    "crates/veridikt_cli",
 ]
 
 [workspace.package]
@@ -13,15 +13,15 @@ version = "0.2.0"
 edition = "2024"
 
 [workspace.lints.clippy]
-# The dogfooding pattern (D-050d) is doc comment, blank line, @lore block,
-# item — the blank line is what keeps the @lore block out of the doc run.
+# The dogfooding pattern (D-050d) is doc comment, blank line, @veridikt block,
+# item — the blank line is what keeps the @veridikt block out of the doc run.
 empty_line_after_doc_comments = "allow"
 
 [workspace.dependencies]
-lore_intent = { path = "crates/lore_intent" }
-lore_annotations = { path = "crates/lore_annotations" }
-lore_derive = { path = "crates/lore_derive" }
-lore_graph = { path = "crates/lore_graph" }
+veridikt_intent = { path = "crates/veridikt_intent" }
+veridikt_annotations = { path = "crates/veridikt_annotations" }
+veridikt_derive = { path = "crates/veridikt_derive" }
+veridikt_graph = { path = "crates/veridikt_graph" }
 # tree-sitter pinned: grammar churn is roadmap risk 4
 tree-sitter = "0.25"
 tree-sitter-python = "0.23"

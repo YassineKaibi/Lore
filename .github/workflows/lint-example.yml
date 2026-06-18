@@ -1,7 +1,7 @@
-# T5 exit criterion: an example of running `lore lint` as a CI gate.
+# T5 exit criterion: an example of running `veridikt lint` as a CI gate.
 # The sample project under examples/ci-sample carries a seeded E0201 (a
 # service with no owner), so this workflow asserts that lint FAILS on it
-# with exit 1 — demonstrating exactly what a red lore-lint check looks
+# with exit 1 — demonstrating exactly what a red veridikt-lint check looks
 # like in a consumer's CI. A real consumer's job is the two `cargo run`
 # lines without the inversion.
 name: lint-example
@@ -12,16 +12,16 @@ on:
   pull_request:
 
 jobs:
-  lore-lint-sample:
+  veridikt-lint-sample:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: lore lint fails on the seeded E0201
+      - name: veridikt lint fails on the seeded E0201
         run: |
           set +e
-          out=$(cargo run -q -p lore_cli -- lint --no-color --manifest examples/ci-sample/lore.toml)
+          out=$(cargo run -q -p veridikt_cli -- lint --no-color --manifest examples/ci-sample/veridikt.toml)
           code=$?
           echo "$out"
           if [ "$code" -ne 1 ]; then

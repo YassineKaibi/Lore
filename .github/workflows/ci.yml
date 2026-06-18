@@ -18,8 +18,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       # T4 exit criterion: the §10.7 perf budget, measured on the release build
-      - run: cargo test -p lore_graph --release queries_over_a_5000_node_graph_answer_under_50ms
+      - run: cargo test -p veridikt_graph --release queries_over_a_5000_node_graph_answer_under_50ms
       # T6 exit criterion: full pipeline over a ~20k-LOC Python tree, cold < 10s / warm < 1s (D-064)
-      - run: cargo test -p lore_cli --release full_pipeline_on_a_20k_loc_python_tree_meets_the_t6_budget
-      # G-12: the Lore repo annotates itself and lints in its own CI from T3
-      - run: cargo run -p lore_cli -- lint
+      - run: cargo test -p veridikt_cli --release full_pipeline_on_a_20k_loc_python_tree_meets_the_t6_budget
+      # G-12: the Veridikt repo annotates itself and lints in its own CI from T3
+      - run: cargo run -p veridikt_cli -- lint

@@ -1,21 +1,21 @@
-// @lore
+// @veridikt
 // purpose: "a class subject (@subject.type)"
 class Subjects {
-  // @lore
+  // @veridikt
   // kind: state
   // name: gamma
   int gamma = 0;
 
-  // @lore
+  // @veridikt
   // purpose: "a method subject (@subject.function)"
   void alpha() {}
 
-  // @lore
+  // @veridikt
   // purpose: "annotated method — exercises the marker_annotation skip (D-050c)"
   @Override
   void beta() {}
 }
 
-// @lore
+// @veridikt
 // purpose: "an interface subject (@subject.type)"
 interface Helper {}

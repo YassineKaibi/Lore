@@ -1,31 +1,31 @@
-# Contributing to Lore
+# Contributing to Veridikt
 
-Thanks for considering a contribution. Lore is documentation-driven: the spec and ledger are binding, and the fastest way to get a PR merged is to ground it in them.
+Thanks for considering a contribution. Veridikt is documentation-driven: the spec and ledger are binding, and the fastest way to get a PR merged is to ground it in them.
 
 ## Architecture in 200 words
 
-Lore builds **one intent graph with two layers** over a codebase. The *derived* layer is extracted from source by static analysis (true by construction); the *declared* layer comes from `@lore` blocks in comments (human intent: `purpose`, `because`, `affects`, …). A reconciliation pass labels every declared claim `Verified`, `Unverified`, `Contradicted`, or `Unverifiable`.
+Veridikt builds **one intent graph with two layers** over a codebase. The *derived* layer is extracted from source by static analysis (true by construction); the *declared* layer comes from `@veridikt` blocks in comments (human intent: `purpose`, `because`, `affects`, …). A reconciliation pass labels every declared claim `Verified`, `Unverified`, `Contradicted`, or `Unverifiable`.
 
 It's a Rust workspace (edition 2024) of five crates in a strict dependency order - never start a crate before the previous one's core works:
 
 ```
-lore_intent → lore_annotations → lore_derive → lore_graph → lore_cli
+veridikt_intent → veridikt_annotations → veridikt_derive → veridikt_graph → veridikt_cli
 ```
 
-- **`lore_intent`** - shared types (`Intent`, `IntentNode`, `Edge`, `Graph`) and the clause parser. Everything consumes these.
-- **`lore_annotations`** - scanner (find `@lore` blocks) + tree-sitter binder (attach each to its subject).
-- **`lore_derive`** - the derived layer: nodes, confidence-labeled edges, the pack loader and import strategies.
-- **`lore_graph`** - graph construction, resolution, reconciliation, hygiene checks, query engine. Consumes upstream *data*, never the crates.
-- **`lore_cli`** - `clap` wiring, manifest discovery, output shaping, exit codes.
+- **`veridikt_intent`** - shared types (`Intent`, `IntentNode`, `Edge`, `Graph`) and the clause parser. Everything consumes these.
+- **`veridikt_annotations`** - scanner (find `@veridikt` blocks) + tree-sitter binder (attach each to its subject).
+- **`veridikt_derive`** - the derived layer: nodes, confidence-labeled edges, the pack loader and import strategies.
+- **`veridikt_graph`** - graph construction, resolution, reconciliation, hygiene checks, query engine. Consumes upstream *data*, never the crates.
+- **`veridikt_cli`** - `clap` wiring, manifest discovery, output shaping, exit codes.
 
 Language support lives in declarative **packs** (`packs/<lang>/`): a manifest plus tree-sitter queries, no per-language Rust for most languages.
 
 ## Read these first
 
-- [`docs/lore-spec.md`](docs/lore-spec.md) - the source of truth. Code that contradicts it is a bug in the code.
-- [`docs/lore-decisions.md`](docs/lore-decisions.md) - the append-only `D-NNN` ledger. A spec gap is resolved by a new D-entry + spec update *before* code.
-- [`docs/lore-guidelines.md`](docs/lore-guidelines.md) - rules `G-1`..`G-14`. Reviews cite these by number.
-- [`docs/lore-roadmap.md`](docs/lore-roadmap.md) - milestones; their order is mandatory.
+- [`docs/veridikt-spec.md`](docs/veridikt-spec.md) - the source of truth. Code that contradicts it is a bug in the code.
+- [`docs/veridikt-decisions.md`](docs/veridikt-decisions.md) - the append-only `D-NNN` ledger. A spec gap is resolved by a new D-entry + spec update *before* code.
+- [`docs/veridikt-guidelines.md`](docs/veridikt-guidelines.md) - rules `G-1`..`G-14`. Reviews cite these by number.
+- [`docs/veridikt-roadmap.md`](docs/veridikt-roadmap.md) - milestones; their order is mandatory.
 
 Two guidelines bite on almost every PR: **G-7** (never present a guess as a fact - drop and count instead of inventing an edge) and **G-11** (unhappy path first - implement and test the failure case before the success case).
 
@@ -57,10 +57,10 @@ If you're unsure whether something fits, open an issue describing the input and 
    cargo test --workspace
    cargo fmt --check
    cargo clippy --workspace --all-targets -- -D warnings
-   cargo run -p lore_cli -- lint        # Lore lints itself
+   cargo run -p veridikt_cli -- lint        # Veridikt lints itself
    ```
-   New pack work also needs: `cargo test -p lore_cli --test conformance`.
-5. **Commit messages explain *why*** and cite spec/ledger/guidelines (`§N.N`, `D-NNN`, `G-N`) - `lore history` renders them back to users (G-10).
+   New pack work also needs: `cargo test -p veridikt_cli --test conformance`.
+5. **Commit messages explain *why*** and cite spec/ledger/guidelines (`§N.N`, `D-NNN`, `G-N`) - `veridikt history` renders them back to users (G-10).
 6. **Open the PR** against `main`. Describe the behavior change and link the issue. CI runs the four checks above; all must be green.
 
 ## Response times I'm committing to
